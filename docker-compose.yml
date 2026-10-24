@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL + PostGIS ───────────────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: resqroute-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: resqroute
+      POSTGRES_USER: resqroute
+      POSTGRES_PASSWORD: resqroute
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resqroute -d resqroute"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: resqroute-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

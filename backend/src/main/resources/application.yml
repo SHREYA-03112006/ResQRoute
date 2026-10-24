@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: resqroute-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:resqroute}
+    username: ${DB_USER:resqroute}
+    password: ${DB_PASSWORD:resqroute}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 20000
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000   # 5 minutes default TTL
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ResQ-Route application settings
+resqroute:
+  tinyfish:
+    api-key: ${TINYFISH_API_KEY:}
+    base-url: ${TINYFISH_BASE_URL:https://api.tinyfish.io}
+    mock-mode: ${TINYFISH_MOCK_MODE:true}   # true = use sample data; false = live API
+  routing:
+    flood-penalty-multiplier: 5.0           # flooding multiplies travel cost by this factor
+    confidence-threshold-accept: 0.70       # reports above this threshold update the graph
+    confidence-threshold-review: 0.40       # reports between review and accept thresholds are flagged
+    report-stale-hours: 6                   # hours before a report confidence starts decaying
+  pilot-district:
+    name: "Chamoli / Rudraprayag, Uttarakhand"
+    bbox-min-lat: 30.1
+    bbox-min-lon: 78.5
+    bbox-max-lat: 31.0
+    bbox-max-lon: 79.7
+
+logging:
+  level:
+    com.resqroute: DEBUG
+    org.hibernate.SQL: WARN

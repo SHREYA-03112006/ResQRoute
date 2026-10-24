@@ -1,0 +1,11 @@
+.env
+target/
+*.class
+*.jar
+*.war
+node_modules/
+dist/
+.idea/
+*.iml
+*.DS_Store
+Thumbs.db
