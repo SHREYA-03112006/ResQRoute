@@ -100,11 +100,11 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- H2 in-memory DB for tests (no PostgreSQL required during test runs) -->
+    <!-- H2 in-memory DB for local development / tests -->
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <scope>test</scope>
+      <scope>runtime</scope>
     </dependency>
   </dependencies>
 
