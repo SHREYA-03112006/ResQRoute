@@ -4,7 +4,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -39,8 +39,31 @@ export const updateReportReview = (id, notes, flagged) =>
 export const getSystemStatus = () =>
   api.get('/status').then((r) => r.data);
 
-// ─── Routes (placeholder for Phase 2) ───────────────────────────────────────
-export const calculateRoute = (originId, destinationId) =>
-  api.post('/routes/calculate', { originId, destinationId }).then((r) => r.data);
+// ─── Routes (Phase 2 Routing Engine) ─────────────────────────────────────────
+export const calculateRoute = (params) =>
+  api.post('/routes/calculate', params).then((r) => r.data);
+
+export const getRoadNetwork = () =>
+  api.get('/routes/network').then((r) => r.data);
+
+export const saveRouteRequest = (originLocationId, destinationLocationId, routeSummaryJson, alternativeCount) =>
+  api.post('/routes/requests', {
+    originLocationId,
+    destinationLocationId,
+    routeSummaryJson,
+    alternativeCount
+  }).then((r) => r.data);
+
+export const approveRouteRequest = (id, notes) =>
+  api.put(`/routes/requests/${id}/approve`, { notes }).then((r) => r.data);
+
+export const rejectRouteRequest = (id, notes) =>
+  api.put(`/routes/requests/${id}/reject`, { notes }).then((r) => r.data);
+
+export const getRouteRequests = () =>
+  api.get('/routes/requests').then((r) => r.data);
+
+export const updateEdgeStatus = (edgeId, status) =>
+  api.put(`/routes/edges/${edgeId}/status`, { status }).then((r) => r.data);
 
 export default api;

@@ -25,12 +25,14 @@ public class DataSeeder implements ApplicationRunner {
 
     private final LocationRepository locationRepository;
     private final RoadReportService roadReportService;
+    private final RoadNetworkSeeder roadNetworkSeeder;
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
         seedLocations();
         roadReportService.loadSampleReportsIfEmpty();
+        roadNetworkSeeder.seedRoadNetworkIfEmpty();
     }
 
     private void seedLocations() {
