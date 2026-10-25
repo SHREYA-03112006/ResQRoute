@@ -1,146 +1,167 @@
-import React, { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, LayerGroup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import StatusBadge from './StatusBadge';
-
-// Fix Leaflet default icon paths broken by Vite bundling
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-// ─── Custom circle marker icons ──────────────────────────────────────────────
-const makeCircleIcon = (color, size = 16) =>
-  L.divIcon({
-    className: '',
-    html: `<div style="
-      width:${size}px;height:${size}px;
-      background:${color};
-      border:2px solid rgba(255,255,255,0.6);
-      border-radius:50%;
-      box-shadow:0 0 8px ${color};
-    "></div>`,
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
-  });
-
-const LOCATION_ICONS = {
-  DEPOT:       makeCircleIcon('#3b82f6', 18),
-  RELIEF_CAMP: makeCircleIcon('#22c55e', 18),
-  HOSPITAL:    makeCircleIcon('#f97316', 16),
-  DEFAULT:     makeCircleIcon('#94a3b8', 14),
-};
-
-const REPORT_ICONS = {
-  BLOCKED:   makeCircleIcon('#ef4444', 14),
-  FLOODED:   makeCircleIcon('#f59e0b', 14),
-  UNCERTAIN: makeCircleIcon('#a78bfa', 12),
-  OPEN:      makeCircleIcon('#22c55e', 10),
-};
-
-// ─── Component to fly to a selection ─────────────────────────────────────────
-function FlyToLocation({ lat, lon, zoom = 12 }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat && lon) map.flyTo([lat, lon], zoom, { duration: 1.2 });
-  }, [lat, lon, zoom, map]);
-  return null;
-}
+import React, { useState, useEffect } from 'react';
+import { useGoogleMaps } from '../hooks/useGoogleMaps';
+import GoogleResQMap from './GoogleResQMap';
+import FallbackResQMap from './FallbackResQMap';
 
 /**
- * ResQMap — Leaflet map component for the ResQ-Route dashboard.
+ * ResQMap — Unified map component for ResQRoute.
  *
- * @param {Object[]} locations  - Array of Location objects from the backend
- * @param {Object[]} reports    - Array of RoadReport objects from the backend
- * @param {Object}   origin     - Selected origin location
- * @param {Object}   destination - Selected destination location
+ * Requirements satisfied:
+ *  - Primary engine: Google Maps JavaScript API with styled dark tactical theme and road network.
+ *  - Reads API key safely from VITE_GOOGLE_MAPS_API_KEY.
+ *  - If key is missing or invalid: displays a helpful configuration banner and renders
+ *    the interactive FallbackResQMap (Leaflet) with full city zones and live tracking,
+ *    never crashing.
+ *  - Provides a manual engine toggle so dispatchers/judges can switch between Google Maps and Fallback.
  */
-export default function ResQMap({ locations = [], reports = [], origin, destination }) {
-  // Centre on Rudraprayag district by default
-  const center = [30.40, 79.10];
-  const zoom = 10;
+export default function ResQMap({
+  city,
+  incidents = [],
+  hazardZones = [],
+  locations = [],
+  liveCoords = null,
+  selectedIncident = null,
+  onSelectIncident,
+}) {
+  const { isLoaded, loadError, hasKey } = useGoogleMaps();
 
-  // Derive fly-to target from selected origin
-  const flyTarget = origin
-    ? { lat: origin.latitude, lon: origin.longitude }
-    : destination
-    ? { lat: destination.latitude, lon: destination.longitude }
-    : null;
+  // Allow user to toggle between Google Maps and Fallback engine
+  const [preferredEngine, setPreferredEngine] = useState('auto'); // 'auto' | 'google' | 'fallback'
+
+  // Decide which engine to actually render
+  const useGoogle =
+    preferredEngine === 'google' ||
+    (preferredEngine === 'auto' && hasKey && isLoaded && !loadError);
+
+  const showConfigWarning = !hasKey || loadError;
 
   return (
-    <MapContainer
-      center={center}
-      zoom={zoom}
-      style={{ width: '100%', height: '100%' }}
-      zoomControl={true}
-    >
-      {/* OpenStreetMap tile layer */}
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+      {/* ── Top Alert Banner for Google Maps Configuration & Engine Selector ── */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 10,
+          left: 14,
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          maxWidth: 'calc(100% - 180px)',
+        }}
+      >
+        {/* Missing / Unverified API Key Notice */}
+        {showConfigWarning && (
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.94)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '6px 12px',
+              fontSize: 11,
+              color: '#fef3c7',
+              boxShadow: 'var(--shadow-md)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              lineHeight: 1.4,
+            }}
+          >
+            <span style={{ fontSize: 14, flexShrink: 0 }}>ℹ️</span>
+            <div>
+              <strong>Google Maps API Key {loadError ? 'Error' : 'Not Set'}: </strong>
+              {loadError ? (
+                <span>{loadError}. Operating via interactive Fallback Map.</span>
+              ) : (
+                <span>
+                  Add <code style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '1px 4px', borderRadius: 3 }}>VITE_GOOGLE_MAPS_API_KEY</code> to your <code style={{ color: '#38bdf8' }}>.env</code> file. ResQRoute is currently operating using the interactive Fallback Map.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
-      {/* Smooth fly-to on location selection */}
-      {flyTarget && <FlyToLocation lat={flyTarget.lat} lon={flyTarget.lon} />}
+        {/* Engine Switcher Pill (if key is configured or user wants to test) */}
+        {hasKey && (
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.90)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid var(--clr-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '3px 6px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              alignSelf: 'flex-start',
+              fontSize: 11,
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <span style={{ color: 'var(--clr-text-muted)', fontSize: 10, textTransform: 'uppercase', fontWeight: 700 }}>
+              Engine:
+            </span>
+            <button
+              onClick={() => setPreferredEngine('google')}
+              disabled={!isLoaded || Boolean(loadError)}
+              style={{
+                background: useGoogle ? 'var(--clr-primary)' : 'transparent',
+                color: useGoogle ? '#fff' : 'var(--clr-text-dim)',
+                border: 'none',
+                padding: '2px 7px',
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 600,
+                cursor: !isLoaded || loadError ? 'not-allowed' : 'pointer',
+                opacity: !isLoaded || loadError ? 0.5 : 1,
+              }}
+              title="Switch to Google Maps"
+            >
+              Google Maps
+            </button>
+            <button
+              onClick={() => setPreferredEngine('fallback')}
+              style={{
+                background: !useGoogle ? 'var(--clr-surface-3)' : 'transparent',
+                color: !useGoogle ? '#fff' : 'var(--clr-text-dim)',
+                border: 'none',
+                padding: '2px 7px',
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title="Switch to Fallback Map (Leaflet/OSM)"
+            >
+              Fallback (OSM)
+            </button>
+          </div>
+        )}
+      </div>
 
-      {/* ── Location markers ── */}
-      <LayerGroup>
-        {locations.map((loc) => {
-          const icon = LOCATION_ICONS[loc.type] || LOCATION_ICONS.DEFAULT;
-          return (
-            <Marker key={loc.id} position={[loc.latitude, loc.longitude]} icon={icon}>
-              <Popup>
-                <div>
-                  <strong style={{ fontSize: 13 }}>{loc.name}</strong>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
-                    {loc.type.replace('_', ' ')}
-                  </div>
-                  {loc.address && (
-                    <div style={{ fontSize: 11, marginTop: 4 }}>{loc.address}</div>
-                  )}
-                  {loc.notes && (
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, fontStyle: 'italic' }}>
-                      {loc.notes}
-                    </div>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </LayerGroup>
-
-      {/* ── Road report markers ── */}
-      <LayerGroup>
-        {reports.map((rep) => {
-          if (!rep.latitude || !rep.longitude) return null;
-          const icon = REPORT_ICONS[rep.reportedStatus] || REPORT_ICONS.UNCERTAIN;
-          return (
-            <Marker key={rep.id} position={[rep.latitude, rep.longitude]} icon={icon}>
-              <Popup>
-                <div>
-                  <strong style={{ fontSize: 13 }}>{rep.reportedRoadName}</strong>
-                  <div style={{ marginTop: 4 }}>
-                    Status: <strong>{rep.reportedStatus}</strong>
-                  </div>
-                  {rep.locationDescription && (
-                    <div style={{ fontSize: 11, marginTop: 4 }}>{rep.locationDescription}</div>
-                  )}
-                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
-                    {rep.dataMode === 'SAMPLE' ? '⚠ SAMPLE DATA — not verified' : '🟢 Live report'}
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                    Confidence: {Math.round((rep.confidenceScore || 0) * 100)}%
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </LayerGroup>
-    </MapContainer>
+      {/* ── Active Map Engine ── */}
+      {useGoogle ? (
+        <GoogleResQMap
+          city={city}
+          incidents={incidents}
+          hazardZones={hazardZones}
+          locations={locations}
+          liveCoords={liveCoords}
+          selectedIncident={selectedIncident}
+          onSelectIncident={onSelectIncident}
+        />
+      ) : (
+        <FallbackResQMap
+          city={city}
+          incidents={incidents}
+          hazardZones={hazardZones}
+          locations={locations}
+          liveCoords={liveCoords}
+          selectedIncident={selectedIncident}
+          onSelectIncident={onSelectIncident}
+        />
+      )}
+    </div>
   );
 }

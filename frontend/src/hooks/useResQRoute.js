@@ -23,9 +23,27 @@ export function useSystemStatus() {
   }, []);
 
   useEffect(() => {
-    fetchStatus();
+    let ignore = false;
+    getSystemStatus()
+      .then((data) => {
+        if (!ignore) {
+          setStatus(data);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setError(err.message);
+          setLoading(false);
+        }
+      });
+
     const id = setInterval(fetchStatus, 30000);
-    return () => clearInterval(id);
+    return () => {
+      ignore = true;
+      clearInterval(id);
+    };
   }, [fetchStatus]);
 
   return { status, loading, error, refetch: fetchStatus };
@@ -51,13 +69,31 @@ export function useReports(params = {}) {
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [params]);
 
   useEffect(() => {
-    fetchReports();
+    let ignore = false;
+    getReports(params)
+      .then((data) => {
+        if (!ignore) {
+          setReports(data);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setError(err.message);
+          setLoading(false);
+        }
+      });
+
     const id = setInterval(fetchReports, 60000);
-    return () => clearInterval(id);
-  }, [fetchReports]);
+    return () => {
+      ignore = true;
+      clearInterval(id);
+    };
+  }, [fetchReports, params]);
 
   return { reports, loading, error, refetch: fetchReports };
 }
@@ -72,10 +108,25 @@ export function useLocations() {
   const [error, setError]         = useState(null);
 
   useEffect(() => {
+    let ignore = false;
     getLocations()
-      .then((data) => { setLocations(data); setError(null); })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (!ignore) {
+          setLocations(data);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setError(err.message);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   return { locations, loading, error };
