@@ -1,271 +1,784 @@
-# ResQ-Route
+# ResQRoute
 
-**AI-powered disaster logistics: turning live web-based road intelligence into safer relief routes.**
-ResQ-Route is a proposed disaster-logistics platform designed to help relief dispatchers understand which roads may be open, flooded, or blocked during floods. It aims to combine public advisories and news with OpenStreetMap road data, route planning, and a human approval workflow.
-**Project status:** Prototype development has not started yet. This README describes the proposed design and planned implementation. The live data pipeline, road matching, routing engine, and dashboard are **not implemented or validated yet**. Any sample route values mentioned in the proposal are illustrative, not live results.
+### Intelligent Disaster Monitoring & Emergency Response Routing Platform
 
----
+> **Detect Faster. Respond Smarter. Save Lives.**
 
-## Table of Contents
+ResQRoute is an intelligent emergency-response platform designed to help rescue teams identify disaster-affected areas, collect real-time disaster intelligence from online sources, visualize incidents on a city-wise map, track rescue-team locations, recommend appropriate emergency resources, and plan suitable response routes.
 
-1. [The Problem](#the-problem)
-2. [Proposed Solution](#proposed-solution)
-3. [Technical Differentiator](#technical-differentiator)
-4. [Planned Architecture](#planned-architecture)
-5. [Planned Tech Stack](#planned-tech-stack)
-6. [Illustrative User Journey](#illustrative-user-journey)
-7. [Implementation Status](#implementation-status)
-8. [Evaluation Plan](#evaluation-plan)
-9. [Risks and Mitigations](#risks-and-mitigations)
-10. [Roadmap](#roadmap)
-11. [Setup](#setup)
-12. [Sources and References](#sources-and-references)
-13. [Team](#team)
+The platform combines **Google Maps**, **live device location**, **TinyFish web intelligence**, disaster-report processing, incident prioritization, resource recommendation, and dispatcher-controlled rescue planning into a unified dashboard.
 
 ---
 
-## The Problem
+## 🎯 Problem Statement
 
-During floods, road conditions can change quickly, while information about closures and passable routes may be scattered across advisories, news reports, and local updates. Relief teams need to know which roads may be unsafe before dispatching supplies.
-The original project proposal highlights the following context:
+During disasters such as fires, floods, landslides, and road blockages, emergency teams often face several challenges:
 
-| Figure | What it refers to | Reference |
-|---|---|---|
-| ~1,600 | Average annual flood-related deaths in India, as cited in the proposal | NDMA website; exact underlying report should be verified before final submission |
-| ~14% | 46 million of India's 329 million hectares described as flood-prone | [Down To Earth article](https://www.downtoearth.org.in/amp/story/water/why-do-floods-droughts-simultaneously-ravage-india-expert-offers-explanation-solutions-95705) |
-| 3.86 million | New disaster-related displacements in India in 2020; this covers **all disaster hazards**, not floods alone | [Researching Internal Displacement review](https://researchinginternaldisplacement.org/short_pieces/disaster-induced-internal-displacement-in-india-in-2020-a-review/) |
+- Disaster information is scattered across different sources.
+- It is difficult to identify the exact affected area quickly.
+- Online reports may contain incomplete or conflicting information.
+- Rescue teams need to know which incidents should be prioritized.
+- Different disasters require different emergency resources.
+- Normal map routes may not account for reported road blockages.
+- Rescue teams need location-aware route planning.
+- Emergency decisions must be made quickly while maintaining human control.
 
-The proposal also cites the June 2013 Uttarakhand floods as an example of severe road disruption and people stranded. The exact source for the specific figures should be checked and linked before making a final public submission.
-
-### Why existing approaches may leave a gap
-| Approach | What it does well | Potential gap for relief logistics |
-|---|---|---|
-| Phone calls and messages to field officers | Can provide trusted local information | Information can be fragmented and difficult to view on one shared map |
-| Official alerts and advisories | Provide important hazard warnings | Road-specific details may be spread across different pages and formats |
-| Everyday navigation apps | Provide convenient routing for normal travel | May not provide a relief-focused workflow with road-status evidence and dispatcher approval |
-
-This is a proposed problem framing, not a claim that existing tools are ineffective in every situation. It should be validated with disaster-management practitioners.
+ResQRoute aims to bring these pieces together into one intelligent emergency-response platform.
 
 ---
 
-## Proposed Solution
-ResQ-Route is planned around four stages:
+# 💡 Solution
 
-1. **Sense:** Use TinyFish to search public sources and retrieve relevant advisories, news, or road-closure reports.
-2. **Match:** Extract a structured road report and attempt to match it to the correct road or edge in an OpenStreetMap road graph.
-3. **Route:** Update the graph using the report status and confidence, then use a Java routing engine to calculate a route and alternatives.
-4. **Review and approve:** Show the proposed route, ETA, evidence, timestamps, and uncertainty to a dispatcher. A human makes the final decision.
+ResQRoute provides a three-phase emergency-response workflow:
 
-The system is intended to support decisions, **not to guarantee that a route is safe** or dispatch vehicles autonomously.
-
----
-
-## Technical Differentiator
-The main technical challenge is not simply finding a flood-related news story. It is determining whether the report refers to the **correct road segment** and how much the routing engine should trust it.
-The planned processing pipeline is:
-
-```mermaid
-flowchart TD
-    A["Public advisory or news report"] --> B["Extract structured road report"]
-    B --> C["Normalize road name, status, place and time"]
-    C --> D["Match report to an OpenStreetMap road edge"]
-    D --> E["Estimate confidence"]
-    E --> F{"Status and confidence"}
-    F -->|"Confirmed blocked"| G["Exclude edge from route graph"]
-    F -->|"Flooded or uncertain"| H["Apply conservative penalty and/or flag"]
-    F -->|"Reported open"| I["Keep normal cost, subject to evidence"]
-    G --> J["Updated road graph"]
-    H --> J
-    I --> J
-    J --> K["Dijkstra / A* route calculation"]
-    K --> L["Dispatcher reviews route and evidence"]
+```text
+City & Live Location
+        ↓
+Disaster Intelligence
+        ↓
+Rescue Planning
+        ↓
+Dispatcher Decision
+        ↓
+Emergency Response
 ```
 
-### Planned road-report fields
-Each extracted report should contain:
+### Phase 1 — City-Wise Map & Live Location
 
-- Road or bridge name
-- Reported status: open, flooded, blocked, or uncertain
-- Location or geographic clues
-- Source title and URL
-- Published/observed time, when available
-- Retrieval timestamp
-- Road-match result
-- Confidence score and reasons for uncertainty
+Provides:
 
-### Planned confidence factors
-Confidence is intended to consider:
+- City-wise interactive map
+- Google Maps integration
+- City selection
+- Disaster/incident markers
+- Affected-area visualization
+- Rescue-team device location
+- Start/stop location tracking
+- Map legends
+- Location permission handling
 
-- **Source quality:** official advisory, news report, or other public source
-- **Recency:** how recently the report was published or observed
-- **Agreement:** whether independent sources report similar conditions
-- **Match quality:** how confidently the report maps to a particular road segment
+### Phase 2 — TinyFish Disaster Intelligence
 
-Old reports should lose confidence over time. Weak or ambiguous matches should be flagged for human review rather than silently treated as certain.
-These rules are a design proposal; the scoring formula and thresholds still need to be implemented and tested.
+Provides:
+
+- Web-based disaster information collection
+- Disaster report extraction
+- Fire, flood, landslide and road-blockage detection
+- Location and road matching
+- Source and timestamp preservation
+- Report confidence
+- Duplicate detection
+- Unverified-report handling
+- Live/demo data distinction
+
+### Phase 3 — Rescue Planning
+
+Provides:
+
+- Incident prioritization
+- Disaster-specific resource recommendations
+- Route planning
+- Road-blockage warnings
+- Rescue-team assignment workflow
+- Incident status tracking
+- Dispatcher approval
+- Final emergency-response dashboard
 
 ---
 
-## Planned Architecture
-```mermaid
-flowchart LR
-    A["Public sources<br/>IMD, NDMA, state/district advisories, news"] --> B["TinyFish<br/>Search / Fetch / Agent"]
-    B --> C["Report validation<br/>and normalization"]
-    C --> D["OSM road matching<br/>and confidence scoring"]
-    D --> E["Road graph updater"]
-    E --> F["Java routing<br/>Dijkstra / A*"]
-    F --> G["Spring Boot REST API"]
-    G --> H["React + Leaflet<br/>dispatcher dashboard"]
-    I[("PostgreSQL + PostGIS")] <--> C
-    I <--> D
-    I <--> E
-    J[("Redis cache")] <--> B
-    J <--> E
+# ✨ Key Features
+
+## 🗺️ City-Wise Interactive Map
+
+The system provides a city-level map where users can:
+
+- Select a city
+- View roads and important locations
+- View reported incidents
+- View affected areas
+- View rescue-team location
+- View planned response routes
+
+Google Maps is used for map visualization and route planning.
+
+---
+
+## 📍 Live Rescue-Team Location
+
+ResQRoute uses the browser's Geolocation API to obtain the current device location after user permission.
+
+The rescue team can:
+
+- Start location tracking
+- View current location
+- Monitor movement on the map
+- Stop tracking when required
+
+The system does not secretly track users.
+
+---
+
+## 🚨 Disaster Intelligence
+
+ResQRoute integrates TinyFish to collect information from relevant web sources.
+
+The system can process information related to:
+
+- 🔥 Fire
+- 🌊 Flood
+- 🏔️ Landslide
+- 🚧 Road blockage
+- 🏢 Building collapse
+- 🏥 Medical emergencies
+- ⚠️ Other emergency situations
+
+The extracted information is converted into structured incident records.
+
+---
+
+## 🔎 Disaster Report Processing
+
+Each incident can contain:
+
+| Information | Description |
+|---|---|
+| Title | Incident title |
+| Category | Fire, flood, landslide, etc. |
+| Location | Reported location |
+| Road | Associated road when available |
+| Coordinates | Latitude/longitude when reliably available |
+| Source | Original information source |
+| Source URL | Original report URL |
+| Published Time | When the report was published |
+| Retrieved Time | When ResQRoute collected it |
+| Confidence | Reliability of extracted information |
+| Status | Verification/processing state |
+
+The system does not fabricate missing information.
+
+---
+
+# 🧠 Incident Prioritization
+
+Incidents are prioritized using available information such as:
+
+- Reported severity
+- Injuries
+- Trapped people
+- Affected population when known
+- Source reliability
+- Report freshness
+- Location confidence
+
+Possible priority levels:
+
+```text
+CRITICAL
+HIGH
+MEDIUM
+LOW
 ```
 
-### Planned role of TinyFish
-- **Search:** discover potentially relevant public web sources.
-- **Fetch:** retrieve clean content from a known URL.
-- **Agent:** navigate a website when needed and extract information into a structured format.
-
-TinyFish is planned as the web-retrieval layer. Road matching, confidence scoring, graph updates, and route calculations are intended to be handled by ResQ-Route's own application code.
+The priority system assists dispatchers and does not replace human decision-making.
 
 ---
 
-## Planned Tech Stack
-| Layer | Planned technology | Intended role |
-|---|---|---|
-| Language/runtime | Java 17 | Core backend and routing logic |
-| Backend | Spring Boot | REST APIs |
-| Routing | Dijkstra; A* if useful | Route calculation on a road graph |
-| Database | PostgreSQL + PostGIS | Store reports, locations, and related geographic data |
-| Cache | Redis | Cache selected results and road-status data |
-| Map data | OpenStreetMap | Road network and map data |
-| Frontend | React + Leaflet | Dispatcher map and interface |
-| Web retrieval | TinyFish Search, Fetch, and Agent APIs | Find and process public web information |
-**All technologies above are planned; they should not be interpreted as already integrated.**
+# 🚒 Emergency Resource Recommendation
+
+ResQRoute recommends resources according to the detected disaster.
+
+### 🔥 Fire
+
+Possible recommendations:
+
+- Fire brigade
+- Firefighting equipment
+- Fire-response personnel
+
+### 🌊 Flood
+
+Possible recommendations:
+
+- Rescue boats
+- Life jackets
+- Evacuation teams
+- Emergency shelters
+
+### 🏔️ Landslide
+
+Possible recommendations:
+
+- Search-and-rescue teams
+- Medical support
+- Clearance equipment
+
+### 🏢 Building Collapse
+
+Possible recommendations:
+
+- Search-and-rescue personnel
+- Structural specialists
+- Ambulances
+- Medical supplies
+
+### 🚧 Road Blockage
+
+Possible recommendations:
+
+- Road clearance teams
+- Alternative route assessment
+
+Recommendations are intended to support dispatcher decisions.
 
 ---
 
-## Illustrative User Journey
-The intended demo scenario is:
+# 🛣️ Route Planning
 
-1. A dispatcher selects a depot and a relief destination.
-2. The system retrieves a relevant public report about a flooded bridge.
-3. The report is extracted, reviewed, and matched to a candidate OpenStreetMap road segment.
-4. If the match and evidence meet the configured rules, the routing graph is updated.
-5. The router calculates a route that avoids confirmed blocked segments and considers penalties for uncertain or flooded segments.
-6. The dashboard presents the suggested route, alternatives, estimated distance/time, report sources, timestamps, and warnings.
-7. The dispatcher reviews the information and decides whether to approve the route.
+ResQRoute integrates map-based route planning to help determine a suitable route between the rescue team and the selected incident.
 
-### Dashboard example from the proposal
-The original proposal includes an illustrative example of a route from a depot to Relief Camp A, with a sample ETA of 2 hours 10 minutes, a distance of 64 km, and two alternatives. These values are **mock data only** and are not measured or generated by a working routing engine.
+The system can display:
 
-### Screenshots
-No working-prototype screenshot is available yet. Screenshots should be added here after the application has been built and the images show actual implemented functionality. Do not use a mock-up as evidence of a live integration without labelling it clearly.
+- Route
+- Distance
+- Estimated travel time
+- Alternative routes where available
+- Road-blockage warnings
 
----
+### Important limitation
 
-## Implementation Status
-This table reflects the project's current planning stage.
+Google Maps does not automatically guarantee that every disaster or road blockage is known.
 
-| Feature | Status |
-|---|---|
-| Problem statement and proposed workflow | Documented |
-| Architecture and technology choices | Planned |
-| OpenStreetMap map interface | Not implemented |
-| Road graph construction and routing | Not implemented |
-| TinyFish Search / Fetch / Agent integration | Not implemented |
-| Road-report extraction and normalization | Not implemented |
-| Matching reports to OSM road edges | Not implemented |
-| Confidence scoring and stale-report handling | Not implemented |
-| Dispatcher dashboard and approval flow | Not implemented |
-| Automated tests and measured evaluation | Not completed |
+Therefore, ResQRoute does **not** automatically claim that a route is disaster-safe.
 
-Update this table as work is completed. Only mark a feature as implemented after it has been coded and tested.
+If a road blockage is reported but cannot be reliably integrated into route calculation, the system warns the dispatcher instead of falsely claiming that the route is safe.
 
 ---
 
-## Evaluation Plan
-The project proposes to measure the following once an implementation exists:
+# 👨‍🚒 Rescue Assignment
 
-| Metric | Planned evaluation |
-|---|---|
-| Extraction quality | Compare extracted road-status reports with a manually labelled set of past advisories; calculate precision and recall |
-| Road matching | Measure the share of reports matched to the correct OpenStreetMap road edge |
-| Route impact | Replay road-closure scenarios and compare routes with and without closure-aware graph updates |
-| Update latency | Measure time from retrieving a new advisory to refreshing the proposed route |
-| Usability | Seek feedback from disaster-management practitioners or NGO volunteers, where feasible |
+The dispatcher can review an incident and:
 
-**No evaluation results are available yet.** Do not report estimated or illustrative values as measured outcomes.
+1. Review incident information.
+2. Check source and confidence.
+3. Review priority.
+4. Review recommended resources.
+5. Select an available rescue team/resource when actual data exists.
+6. Review the proposed route.
+7. Approve the assignment.
+8. Track the incident status.
 
----
+Example incident lifecycle:
 
-## Risks and Mitigations
-| Risk | Planned mitigation |
-|---|---|
-| Stale or conflicting reports | Display source and timestamps, reduce confidence with age, and keep a human in the decision loop |
-| Incorrect road matching | Show match quality and flag ambiguous matches for review |
-| API latency or cost | Refresh only the active area when practical and cache suitable results |
-| Network outage | Consider cached road data; offline/SMS support is future work |
-| Incomplete public information | Display evidence and uncertainty instead of assuming every road's status is known |
-| False impression of route safety | Label routes as recommendations and require dispatcher review |
+```text
+REPORTED
+   ↓
+UNDER REVIEW
+   ↓
+APPROVED
+   ↓
+ASSIGNED
+   ↓
+IN PROGRESS
+   ↓
+RESOLVED
+```
 
----
-
-## Roadmap
-- **Phase 1 — Foundation:** set up the application, map, database, and a narrowly scoped pilot area.
-- **Phase 2 — Routing:** build the road graph and implement route calculation with blocked-road handling.
-- **Phase 3 — Web intelligence:** integrate TinyFish and build structured extraction, road matching, and confidence handling.
-- **Phase 4 — Dispatcher workflow:** display routes, alternatives, evidence, timestamps, warnings, and approval controls.
-- **Phase 5 — Validation:** test edge cases, document limitations, and evaluate performance using labelled scenarios.
-
-Future possibilities include wider geographic coverage, multiple vehicles, medical-supply prioritization, offline/SMS fallback, and additional hazards. These are not part of the current implementation.
+Emergency resources are not automatically dispatched without human approval.
 
 ---
 
-## Setup
-**Setup instructions are not available yet because the application codebase has not been implemented.** This section should be updated once the repository contains the actual frontend and backend projects.
+# 🏗️ System Architecture
 
-The eventual instructions should include:
-
-1. Required Java, Node.js, PostgreSQL/PostGIS, and Redis versions.
-2. Environment-variable configuration, including `TINYFISH_API_KEY`.
-3. Database initialization and any OpenStreetMap data import steps.
-4. Commands to start the backend and frontend.
-5. Test commands and the local application URL.
-
-Never commit API keys or other secrets to the repository. Use environment variables or an untracked local `.env` file, and provide a safe example file such as `.env.example` without real credentials.
+```text
+                     ┌──────────────────────┐
+                     │      ResQRoute       │
+                     │    Web Dashboard     │
+                     └──────────┬───────────┘
+                                │
+                 ┌──────────────┴──────────────┐
+                 │                             │
+                 ▼                             ▼
+        ┌─────────────────┐          ┌─────────────────┐
+        │  Google Maps    │          │ Live Location   │
+        │ Maps / Routes   │          │ Browser GPS     │
+        └────────┬────────┘          └────────┬────────┘
+                 │                            │
+                 └──────────────┬─────────────┘
+                                ▼
+                     ┌──────────────────────┐
+                     │   Spring Boot API    │
+                     │      Backend         │
+                     └──────────┬───────────┘
+                                │
+             ┌──────────────────┼──────────────────┐
+             │                  │                  │
+             ▼                  ▼                  ▼
+      ┌─────────────┐    ┌─────────────┐   ┌─────────────┐
+      │  TinyFish   │    │ PostgreSQL  │   │  Routing &  │
+      │ Web Intel.  │    │  Database   │   │  Decision   │
+      └─────────────┘    └─────────────┘   └─────────────┘
+             │                  │                  │
+             └──────────────────┴──────────────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │ Emergency Dashboard  │
+                     │ Incident + Resources│
+                     │ Route + Assignment   │
+                     └──────────────────────┘
+```
 
 ---
 
-## Sources and References
-These links provide starting points for the proposed data sources and technologies. The exact report supporting each numerical claim should be checked before final submission.
+# 🧩 Technology Stack
 
-- [India Meteorological Department (IMD)](https://mausam.imd.gov.in/)
-- [National Disaster Management Authority (NDMA)](https://ndma.gov.in/)
-- [National Database for Emergency Management (NDEM), NRSC/ISRO](https://ndem.nrsc.gov.in/)
-- [Down To Earth: flood-prone area context](https://www.downtoearth.org.in/amp/story/water/why-do-floods-droughts-simultaneously-ravage-india-expert-offers-explanation-solutions-95705)
-- [Review of disaster-induced internal displacement in India in 2020](https://researchinginternaldisplacement.org/short_pieces/disaster-induced-internal-displacement-in-india-in-2020-a-review/)
-- [OpenStreetMap](https://www.openstreetmap.org/)
-- [OpenStreetMap copyright and attribution](https://www.openstreetmap.org/copyright)
-- [TinyFish website](https://www.tinyfish.ai/)
-- [TinyFish Search and Fetch](https://www.tinyfish.ai/free-search-fetch)
-- [TinyFish Cookbook and API examples](https://github.com/tinyfish-io/TinyFish-cookbook)
-- [PostGIS documentation](https://postgis.net/documentation/)
-- [Spring Boot documentation](https://docs.spring.io/spring-boot/index.html)
-- [Leaflet documentation](https://leafletjs.com/reference.html)
+## Frontend
+
+- React
+- Vite
+- JavaScript
+- CSS / existing project styling
+- Google Maps JavaScript integration
+
+## Backend
+
+- Java
+- Spring Boot
+- Maven
+- REST APIs
+
+## Database
+
+- PostgreSQL
+
+## External Services
+
+- Google Maps Platform
+- TinyFish Web Intelligence API
+- Browser Geolocation API
+
+## Development
+
+- Git
+- GitHub
+- VS Code / Antigravity
 
 ---
 
-## Team
-| Role | Name ||---|---|
-| Team Leader | Shreya |
-| Member | Srishti Singh |
-| Member | Shristi Shukla |
-| Member | Vikas Kumar Srivastava |
+# 📁 Project Structure
+
+```text
+ResQRoute/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── CitySelector.jsx
+│   │   │   ├── GoogleResQMap.jsx
+│   │   │   ├── FallbackResQMap.jsx
+│   │   │   ├── LiveLocationControl.jsx
+│   │   │   ├── ReportCard.jsx
+│   │   │   ├── ResQMap.jsx
+│   │   │   └── RouteLegend.jsx
+│   │   │
+│   │   ├── hooks/
+│   │   │   ├── useGoogleMaps.js
+│   │   │   ├── useLiveLocation.js
+│   │   │   └── useResQRoute.js
+│   │   │
+│   │   ├── pages/
+│   │   │   └── Dashboard.jsx
+│   │   │
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   │
+│   │   └── data/
+│   │
+│   ├── package.json
+│   └── .env.example
+│
+├── backend/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── com/resqroute/
+│   │   │   │       ├── controller/
+│   │   │   │       ├── dto/
+│   │   │   │       ├── model/
+│   │   │   │       └── service/
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       └── application.yml
+│   │   │
+│   │   └── test/
+│   │
+│   └── pom.xml
+│
+├── scripts/
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
+
+> The exact structure may evolve as the backend and frontend are extended.
 
 ---
 
-## Project Principle
-**ResQ-Route is a decision-support tool, not an autonomous safety authority.** It is designed to help dispatchers combine road-status evidence with routing suggestions. Real-world road conditions must be verified through appropriate local and official channels, and a human dispatcher remains responsible for the final decision.
+# ⚙️ Installation & Setup
+
+## Prerequisites
+
+Make sure the following are installed:
+
+- Node.js
+- npm
+- Java JDK
+- PostgreSQL
+- Git
+
+For live integrations, you also need:
+
+- Google Maps API key
+- TinyFish API key
+
+---
+
+# 🔑 Environment Variables
+
+## Frontend
+
+Create:
+
+```text
+frontend/.env
+```
+
+Example:
+
+```env
+VITE_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+```
+
+Never commit the actual API key.
+
+---
+
+## Backend
+
+Configure the required environment variables according to the existing backend configuration.
+
+Example:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=resqroute
+DB_USER=resqroute
+DB_PASSWORD=your_database_password
+
+TINYFISH_API_KEY=your_tinyfish_api_key
+TINYFISH_MOCK_MODE=false
+
+SERVER_PORT=8080
+```
+
+Use mock mode when testing without a live TinyFish API:
+
+```env
+TINYFISH_MOCK_MODE=true
+```
+
+---
+
+# ▶️ Running the Frontend
+
+Open a terminal:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+The frontend will normally be available at the Vite development URL shown in the terminal.
+
+---
+
+# ▶️ Running the Backend
+
+Open another terminal:
+
+```bash
+cd backend
+```
+
+If the Maven wrapper is correctly configured:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+Alternatively, if Maven is installed:
+
+```bash
+mvn spring-boot:run
+```
+
+The backend is configured to run on:
+
+```text
+http://localhost:8080
+```
+
+with the configured API context path.
+
+---
+
+# 🗄️ Database
+
+ResQRoute uses PostgreSQL for persistent application data.
+
+Create the required database before starting the backend.
+
+Example:
+
+```sql
+CREATE DATABASE resqroute;
+```
+
+Then configure:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=resqroute
+DB_USER=resqroute
+DB_PASSWORD=your_database_password
+```
+
+The project's Spring Boot/JPA configuration manages the application's database schema according to the current configuration.
+
+---
+
+# 🔐 API Security
+
+The following principles are followed:
+
+- API keys are stored in environment variables.
+- TinyFish credentials remain on the backend.
+- Google Maps browser credentials should use appropriate API restrictions.
+- Secrets must not be committed to GitHub.
+- Live location requires explicit user permission.
+- Dispatcher actions should be protected by authorization when authentication is available.
+
+---
+
+# 🔄 Complete Workflow
+
+```text
+1. Select City
+        ↓
+2. Open City Map
+        ↓
+3. Rescue Team Shares Location
+        ↓
+4. TinyFish Collects Disaster Reports
+        ↓
+5. Reports Are Parsed & Normalized
+        ↓
+6. Incident Location Is Matched
+        ↓
+7. Incident Confidence & Priority Calculated
+        ↓
+8. Incident Appears on Map
+        ↓
+9. Resources Recommended
+        ↓
+10. Dispatcher Reviews Incident
+        ↓
+11. Route Planned
+        ↓
+12. Rescue Team Assigned
+        ↓
+13. Incident Status Updated
+        ↓
+14. Incident Resolved
+```
+
+---
+
+# 🧪 Testing Strategy
+
+The project should test the following areas:
+
+### Frontend
+
+- City selection
+- Map loading
+- Missing API key handling
+- Location permission handling
+- Start/stop tracking
+- Incident rendering
+- Loading states
+- Empty states
+- API failure states
+
+### Backend
+
+- TinyFish response parsing
+- Mock mode
+- API failure handling
+- Disaster classification
+- Location matching
+- Duplicate detection
+- Confidence calculation
+- Incident prioritization
+- Resource recommendation
+- Route API failures
+- Assignment workflow
+
+External services should be mocked during automated testing wherever possible.
+
+---
+
+# ⚠️ Important Limitations
+
+ResQRoute is designed as an intelligent decision-support system. It does not replace official emergency services or human dispatchers.
+
+### Disaster Detection
+
+TinyFish can collect information from online sources, but online information may be:
+
+- Incomplete
+- Delayed
+- Incorrect
+- Conflicting
+
+Therefore, collected information should be treated according to its confidence and verification status.
+
+### Google Maps
+
+Google Maps provides mapping and routing capabilities but does not guarantee awareness of every disaster or road blockage.
+
+### Live Location
+
+Live tracking requires:
+
+- User permission
+- A supported device/browser
+- Location services
+
+### Resource Availability
+
+The system should not claim that a fire brigade, ambulance, rescue boat, or other resource is physically available unless real resource-inventory data is connected.
+
+### Emergency Dispatch
+
+ResQRoute does not automatically dispatch real emergency services.
+
+A human dispatcher should review and approve operational decisions.
+
+---
+
+# 🚀 Future Scope
+
+Possible future improvements include:
+
+- Real-time government disaster feeds
+- Official weather and flood APIs
+- Real rescue-team fleet tracking
+- IoT-based disaster sensors
+- Satellite imagery integration
+- Computer vision for damage detection
+- Advanced road-risk prediction
+- Offline emergency operation
+- Multi-city and nationwide deployment
+- Real emergency-service integration
+- Historical disaster analytics
+- Predictive disaster-risk mapping
+- Mobile application for rescue teams
+- Automated alert notifications
+- Multi-agency coordination
+
+---
+
+# 🎯 Project Impact
+
+ResQRoute aims to reduce the time between **disaster detection and emergency response** by bringing information, location, routing, and resource planning into a single platform.
+
+Instead of requiring rescue teams to manually search multiple sources, ResQRoute provides a centralized interface for:
+
+```text
+Discover → Verify → Prioritize → Plan → Respond
+```
+
+This can help emergency coordinators make faster and more informed decisions while keeping final operational control with authorized personnel.
+
+---
+
+# 🏆 Project Highlights
+
+- 🌍 City-wise disaster visualization
+- 📍 Live rescue-team location
+- 🗺️ Google Maps integration
+- 🔎 Web-based disaster intelligence
+- 🤖 TinyFish integration
+- 🚨 Multi-disaster incident detection
+- 📊 Incident confidence and prioritization
+- 🚒 Disaster-specific resource recommendations
+- 🛣️ Route planning
+- 👨‍🚒 Dispatcher-controlled rescue assignment
+- 🔐 Environment-based API configuration
+- ⚡ Full-stack emergency-response workflow
+
+---
+
+# 👥 Team
+
+**Project:** ResQRoute
+
+**Domain:** Disaster Management / Emergency Response / Intelligent Routing
+
+**Repository:**  
+https://github.com/SHREYA-03112006/ResQRoute
+
+---
+
+# 📌 Development Phases
+
+### Phase 1
+**City-Wise Map & Live Location**
+
+Google Maps + city selection + live rescue-team location.
+
+### Phase 2
+**TinyFish Disaster Intelligence**
+
+Web-based disaster information collection + incident processing + map integration.
+
+### Phase 3
+**Rescue Planning & Response**
+
+Incident prioritization + resource recommendation + route planning + rescue assignment + final dashboard.
+
+---
+
+# 📄 License
+
+Add the project's intended license here if the team decides to publish the project under an open-source license.
+
+---
+
+## 🚨 ResQRoute
+
+> **Detect Faster. Respond Smarter. Save Lives.**
