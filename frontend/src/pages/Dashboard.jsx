@@ -1,147 +1,257 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Header from '../components/Header';
 import ResQMap from '../components/ResQMap';
 import ReportCard from '../components/ReportCard';
 import RoutePanel from '../components/RoutePanel';
 import RouteLegend from '../components/RouteLegend';
-import { getLocations, getReports, getSystemStatus } from '../services/api';
+import LiveLocationControl from '../components/LiveLocationControl';
+import { getCities, getCityById, DEFAULT_CITY_ID } from '../data/cityData';
+import { useLiveLocation } from '../hooks/useLiveLocation';
+import { getLocations, getReports, getSystemStatus, triggerTinyFishSync, submitReportReview } from '../services/api';
 
 /**
- * Dashboard — main page of the ResQ-Route dispatcher interface.
+ * Dashboard — ResQRoute Emergency Disaster Response & Rescue Coordination Dashboard.
  *
- * Layout:
- *  ┌─ Left (340px) ─┬─ Map ─────────────────┬─ Right (300px) ─┐
- *  │ Depot select    │ OpenStreetMap + Leaflet│ Road reports    │
- *  │ Camp select     │ Location markers       │ Confidence bars │
- *  │ Route panel     │ Report markers         │ Flagged items   │
- *  │ Legend          │                        │                 │
- *  └─────────────────┴───────────────────────┴─────────────────┘
+ * Phase 1 features:
+ *  - City-wise interactive map with road network and Google Maps integration
+ *  - Configurable city selector (Dehradun default, Rishikesh, Haridwar, Rudraprayag, Chamoli, Nainital)
+ *  - Clear affected disaster hazard perimeters and road blockage markers (all clearly labeled DEMO)
+ *  - Live rescue-team location tracking using browser Geolocation API with user authorization
+ *  - Safe fallback map engine when Google Maps API key is not configured
  */
 export default function Dashboard() {
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [locations, setLocations]       = useState([]);
-  const [reports, setReports]           = useState([]);
-  const [systemStatus, setSystemStatus] = useState(null);
-  const [origin, setOrigin]             = useState(null);
-  const [destination, setDestination]   = useState(null);
+  // ── City & Sector State ────────────────────────────────────────────────────
+  const [selectedCityId, setSelectedCityId] = useState(DEFAULT_CITY_ID);
+  const selectedCity = useMemo(() => getCityById(selectedCityId), [selectedCityId]);
 
-  const [locLoading, setLocLoading]     = useState(true);
-  const [repLoading, setRepLoading]     = useState(true);
-  const [backendError, setBackendError] = useState(false);
+  // ── Live Geolocation Hook ──────────────────────────────────────────────────
+  const liveLocation = useLiveLocation();
 
-  // ── Fetch helpers ──────────────────────────────────────────────────────────
-  const fetchAll = async () => {
+  // ── Backend / Data State ───────────────────────────────────────────────────
+  const [backendLocations, setBackendLocations] = useState([]);
+  const [backendReports, setBackendReports]     = useState([]);
+  const [systemStatus, setSystemStatus]         = useState(null);
+  const [backendError, setBackendError]         = useState(false);
+  const [loadingBackend, setLoadingBackend]     = useState(true);
+
+  // ── Routing & Selection State ──────────────────────────────────────────────
+  const [origin, setOrigin]                     = useState(null);
+  const [destination, setDestination]           = useState(null);
+  const [selectedIncident, setSelectedIncident] = useState(null);
+  const [activeFilter, setActiveFilter]         = useState('ALL'); // 'ALL' | 'CRITICAL' | 'BLOCKED' | 'FLOODED' | 'OPEN'
+
+  // TinyFish sync status
+  const [syncingTinyFish, setSyncing]           = useState(false);
+  const [syncSuccessMsg, setSyncMsg]            = useState('');
+
+  // ── Fetch Backend Data ─────────────────────────────────────────────────────
+  const fetchBackend = useCallback(async () => {
     try {
       const [locs, reps, status] = await Promise.all([
-        getLocations(),
-        getReports({ hoursBack: 48 }),
-        getSystemStatus(),
+        getLocations().catch(() => []),
+        getReports({ hoursBack: 48 }).catch(() => []),
+        getSystemStatus().catch(() => null),
       ]);
-      setLocations(locs);
-      setReports(reps);
-      setSystemStatus(status);
+      setBackendLocations(Array.isArray(locs) ? locs : []);
+      setBackendReports(Array.isArray(reps) ? reps : []);
+      if (status) setSystemStatus(status);
       setBackendError(false);
-    } catch (err) {
-      console.error('Backend error:', err.message);
+    } catch {
       setBackendError(true);
     } finally {
-      setLocLoading(false);
-      setRepLoading(false);
+      setLoadingBackend(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 60000);
-    return () => clearInterval(interval);
   }, []);
 
-  // ── Derived data ───────────────────────────────────────────────────────────
-  const depots       = locations.filter((l) => l.type === 'DEPOT');
-  const reliefCamps  = locations.filter((l) => l.type === 'RELIEF_CAMP');
-  const hospitals    = locations.filter((l) => l.type === 'HOSPITAL');
+  useEffect(() => {
+    fetchBackend();
+  }, [fetchBackend]);
 
-  const flaggedCount = reports.filter((r) => r.flaggedForReview).length;
-  const blockedCount = reports.filter((r) => r.reportedStatus === 'BLOCKED').length;
-  const floodedCount = reports.filter((r) => r.reportedStatus === 'FLOODED').length;
+  // Reset origin/destination when city changes
+  useEffect(() => {
+    setOrigin(null);
+    setDestination(null);
+    setSelectedIncident(null);
+  }, [selectedCityId]);
 
+  // ── Unified Data Resolution ───────────────────────────────────────────────
+  // Combine city demo data with backend data (if available)
+  const currentLocations = useMemo(() => {
+    const cityLocs = selectedCity.locations || [];
+    if (backendLocations.length > 0) {
+      // Merge unique backend locations
+      return [...cityLocs, ...backendLocations.filter((bl) => !cityLocs.some((cl) => cl.id === bl.id))];
+    }
+    return cityLocs;
+  }, [selectedCity, backendLocations]);
+
+  const currentIncidents = useMemo(() => {
+    const cityIncs = selectedCity.incidents || [];
+    if (backendReports.length > 0) {
+      return [...cityIncs, ...backendReports];
+    }
+    return cityIncs;
+  }, [selectedCity, backendReports]);
+
+  const hazardZones = useMemo(() => {
+    return selectedCity.hazardZones || [];
+  }, [selectedCity]);
+
+  // Counts for cities to display in header selector
+  const cityIncidentCounts = useMemo(() => {
+    const counts = {};
+    getCities().forEach((c) => {
+      counts[c.id] = c.incidents?.length || 0;
+    });
+    return counts;
+  }, []);
+
+  // Filtered incidents for the right sidebar
+  const filteredIncidents = useMemo(() => {
+    if (activeFilter === 'ALL') return currentIncidents;
+    if (activeFilter === 'CRITICAL') return currentIncidents.filter((i) => i.severity === 'CRITICAL');
+    return currentIncidents.filter((i) => i.reportedStatus === activeFilter);
+  }, [currentIncidents, activeFilter]);
+
+  // Situation metrics for this city
+  const blockedCount = currentIncidents.filter((r) => r.reportedStatus === 'BLOCKED').length;
+  const floodedCount = currentIncidents.filter((r) => r.reportedStatus === 'FLOODED').length;
+  const flaggedCount = currentIncidents.filter((r) => r.flaggedForReview).length;
+
+  const depots      = currentLocations.filter((l) => l.type === 'DEPOT');
+  const reliefCamps = currentLocations.filter((l) => l.type === 'RELIEF_CAMP');
+  const hospitals   = currentLocations.filter((l) => l.type === 'HOSPITAL');
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleOriginChange = (e) => {
-    const loc = locations.find((l) => l.id === parseInt(e.target.value));
+    const loc = currentLocations.find((l) => l.id === parseInt(e.target.value));
     setOrigin(loc || null);
   };
 
   const handleDestinationChange = (e) => {
-    const loc = locations.find((l) => l.id === parseInt(e.target.value));
+    const loc = currentLocations.find((l) => l.id === parseInt(e.target.value));
     setDestination(loc || null);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const handleTriggerTinyFish = async () => {
+    setSyncing(true);
+    setSyncMsg('');
+    try {
+      const resp = await triggerTinyFishSync();
+      setSyncMsg(`✓ Ingested ${resp?.extractedCount || 0} reports from TinyFish!`);
+      await fetchBackend();
+      setTimeout(() => setSyncMsg(''), 5000);
+    } catch (err) {
+      setSyncMsg('⚠ Sync failed: ' + (err.message || 'Service unavailable'));
+      setTimeout(() => setSyncMsg(''), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleReviewReport = async (reportId, reviewData) => {
+    try {
+      await submitReportReview(reportId, reviewData);
+      await fetchBackend();
+    } catch (err) {
+      console.warn('Review submission offline:', err.message);
+    }
+  };
+
+  const handleCenterOnTeam = () => {
+    if (liveLocation.coords) {
+      setSelectedIncident({
+        coordinates: { lat: liveLocation.coords.lat, lng: liveLocation.coords.lng },
+      });
+    }
+  };
+
   return (
     <div className="app-shell">
-      <Header systemStatus={systemStatus} backendError={backendError} />
+      {/* ═══ TOP HEADER ═════════════════════════════════════════════════════ */}
+      <Header
+        systemStatus={systemStatus}
+        backendError={backendError}
+        selectedCityId={selectedCityId}
+        onSelectCity={setSelectedCityId}
+        cityIncidentCounts={cityIncidentCounts}
+      />
 
       <div className="dashboard">
-        {/* ═══ LEFT PANEL ═══════════════════════════════════════════════════ */}
+        {/* ═══ LEFT PANEL (Dispatcher Command & Controls) ═══════════════════ */}
         <aside className="panel-left">
-          {/* Depot Selection */}
+          {/* Live Rescue Team GPS Tracking Control */}
+          <div className="panel-section">
+            <LiveLocationControl
+              isTracking={liveLocation.isTracking}
+              status={liveLocation.status}
+              coords={liveLocation.coords}
+              error={liveLocation.error}
+              startTracking={liveLocation.startTracking}
+              stopTracking={liveLocation.stopTracking}
+              onCenterOnTeam={handleCenterOnTeam}
+            />
+          </div>
+
+          {/* Route Planning (Depot & Camp Selection) */}
           <div className="panel-section">
             <div className="section-header">
               <span className="section-title">🏭 Route Planning</span>
+              <span className="section-count">{selectedCity.name}</span>
             </div>
             <div className="section-body">
               <div className="form-group">
                 <label className="form-label" htmlFor="select-origin">Origin Depot</label>
-                {locLoading ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--clr-text-muted)', fontSize: 12 }}>
-                    <div className="loading-spinner" /> Loading…
-                  </div>
-                ) : (
-                  <select id="select-origin" className="form-select" onChange={handleOriginChange} defaultValue="">
-                    <option value="" disabled>Select depot…</option>
-                    {depots.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                )}
+                <select
+                  id="select-origin"
+                  className="form-select"
+                  value={origin?.id || ''}
+                  onChange={handleOriginChange}
+                >
+                  <option value="" disabled>Select origin depot…</option>
+                  {depots.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
                 <label className="form-label" htmlFor="select-destination">Destination Relief Camp</label>
-                {locLoading ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--clr-text-muted)', fontSize: 12 }}>
-                    <div className="loading-spinner" /> Loading…
-                  </div>
-                ) : (
-                  <select id="select-destination" className="form-select" onChange={handleDestinationChange} defaultValue="">
-                    <option value="" disabled>Select relief camp…</option>
-                    {reliefCamps.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                )}
+                <select
+                  id="select-destination"
+                  className="form-select"
+                  value={destination?.id || ''}
+                  onChange={handleDestinationChange}
+                >
+                  <option value="" disabled>Select destination relief camp…</option>
+                  {reliefCamps.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
 
               <button
                 id="btn-calculate-route"
                 className="btn btn-primary btn-full"
                 disabled={!origin || !destination}
-                title={!origin || !destination ? 'Select both depot and destination first' : 'Calculate route'}
+                title={!origin || !destination ? 'Select both depot and relief camp first' : 'Calculate route'}
               >
                 🗺️ Calculate Route
               </button>
 
               {!origin && !destination && (
                 <div style={{ fontSize: 11, color: 'var(--clr-text-muted)', marginTop: 8, fontStyle: 'italic' }}>
-                  Route engine available in Phase 2
+                  Select depot & camp in {selectedCity.name} to plan relief routing
                 </div>
               )}
             </div>
           </div>
 
-          {/* Situation Summary */}
+          {/* Situation Metric Cards */}
           <div className="panel-section">
             <div className="section-header">
-              <span className="section-title">📊 Situation</span>
+              <span className="section-title">📊 Sector Situation</span>
+              <span style={{ fontSize: 10, color: 'var(--clr-text-muted)' }}>{selectedCity.name}</span>
             </div>
             <div className="section-body" style={{ display: 'flex', gap: 8 }}>
               {[
@@ -171,24 +281,37 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Route Panel */}
+          {/* Route Panel Placeholder (Phase 2) */}
           <RoutePanel origin={origin} destination={destination} />
 
-          {/* Legend */}
+          {/* Route and Marker Legend */}
           <RouteLegend />
 
-          {/* Hospitals */}
+          {/* Hospitals in this City */}
           {hospitals.length > 0 && (
             <div className="panel-section panel-section-scrollable">
               <div className="section-header">
-                <span className="section-title">🏥 Hospitals</span>
+                <span className="section-title">🏥 Hospitals ({selectedCity.name})</span>
                 <span className="section-count">{hospitals.length}</span>
               </div>
               <div className="section-body">
                 {hospitals.map((h) => (
-                  <div key={h.id} style={{ marginBottom: 6, fontSize: 12 }}>
-                    <div style={{ fontWeight: 600 }}>{h.name}</div>
-                    <div style={{ color: 'var(--clr-text-muted)', fontSize: 11 }}>{h.address}</div>
+                  <div
+                    key={h.id}
+                    style={{
+                      marginBottom: 8,
+                      fontSize: 12,
+                      padding: '6px 8px',
+                      background: 'var(--clr-surface-2)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--clr-border)',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: '#f1f5f9' }}>{h.name}</div>
+                    <div style={{ color: 'var(--clr-text-muted)', fontSize: 11, marginTop: 2 }}>{h.address}</div>
+                    {h.notes && (
+                      <div style={{ color: '#38bdf8', fontSize: 10, marginTop: 3 }}>{h.notes}</div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -196,83 +319,158 @@ export default function Dashboard() {
           )}
         </aside>
 
-        {/* ═══ MAP ══════════════════════════════════════════════════════════ */}
+        {/* ═══ CENTER INTERACTIVE MAP ═══════════════════════════════════════ */}
         <main className="map-container">
-          {backendError && (
-            <div style={{
-              position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 500, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
-              borderRadius: 'var(--radius-sm)', padding: '8px 16px', fontSize: 12, color: '#fca5a5',
-            }}>
-              ⚠ Backend unavailable — map shows cached/sample data only
-            </div>
-          )}
           <ResQMap
-            locations={locations}
-            reports={reports}
-            origin={origin}
-            destination={destination}
+            city={selectedCity}
+            incidents={currentIncidents}
+            hazardZones={hazardZones}
+            locations={currentLocations}
+            liveCoords={liveLocation.coords}
+            selectedIncident={selectedIncident}
+            onSelectIncident={setSelectedIncident}
           />
-          <div className="map-overlay-badge">
-            Uttarakhand — Chamoli / Rudraprayag pilot district
+
+          {/* Sector Overlay Badge */}
+          <div
+            className="map-overlay-badge"
+            style={{
+              position: 'absolute',
+              bottom: 14,
+              right: 14,
+              background: 'rgba(11, 15, 26, 0.88)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid var(--clr-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '6px 12px',
+              fontSize: 11,
+              color: 'var(--clr-text)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              zIndex: 10,
+            }}
+          >
+            <span>📍 <strong>Sector:</strong> {selectedCity.name}</span>
+            <span style={{ color: 'var(--clr-text-muted)' }}>•</span>
+            <span style={{ color: 'var(--clr-accent)' }}>{selectedCity.region}</span>
+            <span style={{ color: 'var(--clr-text-muted)' }}>•</span>
+            <span style={{ color: '#f59e0b', fontSize: 10, fontWeight: 700 }}>DEMO DATA</span>
           </div>
         </main>
 
-        {/* ═══ RIGHT PANEL ══════════════════════════════════════════════════ */}
+        {/* ═══ RIGHT PANEL (City Incidents & Reports) ═══════════════════════ */}
         <aside className="panel-right">
-          <div className="section-header panel-section">
-            <span className="section-title">📋 Road Condition Reports</span>
-            <span className="section-count">{reports.length}</span>
+          <div className="section-header panel-section" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span className="section-title">📋 {selectedCity.name} Reports</span>
+                <div style={{ fontSize: 10, color: 'var(--clr-text-muted)', marginTop: 2 }}>
+                  All items marked [DEMO] for simulation
+                </div>
+              </div>
+              <span className="section-count">{currentIncidents.length}</span>
+            </div>
+
+            {/* Severity Filter Tabs */}
+            <div style={{ display: 'flex', gap: 4, background: 'var(--clr-surface-2)', padding: 3, borderRadius: 'var(--radius-sm)' }}>
+              {[
+                { id: 'ALL', label: 'All' },
+                { id: 'CRITICAL', label: 'Critical' },
+                { id: 'BLOCKED', label: 'Blocked' },
+                { id: 'FLOODED', label: 'Flooded' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveFilter(tab.id)}
+                  style={{
+                    flex: 1,
+                    background: activeFilter === tab.id ? 'var(--clr-primary)' : 'transparent',
+                    color: activeFilter === tab.id ? '#ffffff' : 'var(--clr-text-dim)',
+                    border: 'none',
+                    borderRadius: 3,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '3px 0',
+                    cursor: 'pointer',
+                    transition: 'var(--transition-fast)',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* TinyFish Public Reports Trigger */}
+            <button
+              onClick={handleTriggerTinyFish}
+              disabled={syncingTinyFish}
+              className="btn btn-secondary"
+              style={{
+                width: '100%',
+                fontSize: 11,
+                padding: '5px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                background: 'rgba(59,130,246,0.12)',
+                borderColor: 'rgba(59,130,246,0.3)',
+                color: '#60a5fa',
+              }}
+            >
+              {syncingTinyFish ? (
+                <>
+                  <div className="loading-spinner" style={{ width: 12, height: 12 }} />
+                  Syncing Public Feeds…
+                </>
+              ) : (
+                <>🎣 Sync TinyFish Public Reports</>
+              )}
+            </button>
+
+            {syncSuccessMsg && (
+              <div style={{ fontSize: 11, color: syncSuccessMsg.startsWith('✓') ? '#4ade80' : '#f87171', textAlign: 'center' }}>
+                {syncSuccessMsg}
+              </div>
+            )}
           </div>
 
-          {repLoading ? (
+          {/* Incident List */}
+          {loadingBackend && currentIncidents.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24, color: 'var(--clr-text-muted)', fontSize: 13 }}>
               <div className="loading-spinner" /> Loading reports…
             </div>
-          ) : reports.length === 0 ? (
+          ) : filteredIncidents.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">📭</div>
-              <div>No road-condition reports found.</div>
+              <div>No road-condition reports match "{activeFilter}".</div>
             </div>
           ) : (
             <div className="panel-section-scrollable" style={{ padding: '8px 12px' }}>
-              {/* Flagged reports first */}
-              {reports.filter((r) => r.flaggedForReview).length > 0 && (
-                <>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--clr-flooded)', margin: '4px 0 8px' }}>
-                    ⚑ Requires Review
-                  </div>
-                  {reports.filter((r) => r.flaggedForReview).map((r) => (
-                    <ReportCard key={r.id} report={r} />
-                  ))}
-                  <div style={{ height: 8 }} />
-                </>
-              )}
+              <div style={{ fontSize: 10, color: 'var(--clr-text-muted)', marginBottom: 8, fontStyle: 'italic' }}>
+                💡 Click any incident below to center and highlight it on the map:
+              </div>
 
-              {/* Blocked roads */}
-              {reports.filter((r) => r.reportedStatus === 'BLOCKED' && !r.flaggedForReview).length > 0 && (
-                <>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--clr-blocked)', margin: '4px 0 8px' }}>
-                    🚫 Blocked Roads
+              {filteredIncidents.map((r) => {
+                const isSelected = selectedIncident?.id === r.id;
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => setSelectedIncident(r)}
+                    style={{
+                      cursor: 'pointer',
+                      borderRadius: 'var(--radius-sm)',
+                      outline: isSelected ? '2px solid var(--clr-accent)' : 'none',
+                      boxShadow: isSelected ? '0 0 12px rgba(6, 182, 212, 0.4)' : 'none',
+                      transition: 'var(--transition-fast)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <ReportCard report={r} onReview={handleReviewReport} />
                   </div>
-                  {reports.filter((r) => r.reportedStatus === 'BLOCKED' && !r.flaggedForReview).map((r) => (
-                    <ReportCard key={r.id} report={r} />
-                  ))}
-                  <div style={{ height: 8 }} />
-                </>
-              )}
-
-              {/* Flooded roads */}
-              {reports.filter((r) => r.reportedStatus === 'FLOODED' && !r.flaggedForReview).length > 0 && (
-                <>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--clr-flooded)', margin: '4px 0 8px' }}>
-                    🌊 Flooded Roads
-                  </div>
-                  {reports.filter((r) => r.reportedStatus === 'FLOODED' && !r.flaggedForReview).map((r) => (
-                    <ReportCard key={r.id} report={r} />
-                  ))}
-                </>
-              )}
+                );
+              })}
             </div>
           )}
         </aside>

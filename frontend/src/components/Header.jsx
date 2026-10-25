@@ -1,13 +1,23 @@
 import React from 'react';
 import DataModeBanner from './DataModeBanner';
+import CitySelector from './CitySelector';
 
 /**
  * Header — top navigation bar for the ResQ-Route dispatcher dashboard.
  *
  * @param {Object} systemStatus - Status object from /api/status
  * @param {boolean} backendError - true if backend is unreachable
+ * @param {string} selectedCityId - Currently selected city ID
+ * @param {Function} onSelectCity - Handler when user selects a different city
+ * @param {Object} cityIncidentCounts - Counts of incidents per city
  */
-export default function Header({ systemStatus, backendError }) {
+export default function Header({
+  systemStatus,
+  backendError,
+  selectedCityId,
+  onSelectCity,
+  cityIncidentCounts,
+}) {
   return (
     <header className="header">
       <div className="header-brand">
@@ -18,10 +28,19 @@ export default function Header({ systemStatus, backendError }) {
         </div>
       </div>
 
+      {/* Center City Selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <CitySelector
+          selectedCityId={selectedCityId}
+          onSelectCity={onSelectCity}
+          cityIncidentCounts={cityIncidentCounts}
+        />
+      </div>
+
       <div className="header-meta">
         {backendError ? (
           <div className="data-mode-banner data-mode-sample">
-            ⚠ Backend offline — check server logs
+            ⚠ DEMO MODE — Backend Offline
           </div>
         ) : systemStatus ? (
           <>
@@ -30,13 +49,12 @@ export default function Header({ systemStatus, backendError }) {
               lastRefresh={systemStatus.lastRefresh}
             />
             <div style={{ fontSize: 11, color: 'var(--clr-text-muted)' }}>
-              📍 {systemStatus.pilotDistrict}
+              📍 {systemStatus.pilotDistrict || 'Uttarakhand Command'}
             </div>
           </>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div className="loading-spinner" />
-            <span style={{ fontSize: 11, color: 'var(--clr-text-muted)' }}>Connecting…</span>
+          <div className="data-mode-banner data-mode-sample">
+            DEMO MODE • Phase 1
           </div>
         )}
       </div>
