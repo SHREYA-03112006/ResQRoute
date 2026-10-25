@@ -2,8 +2,8 @@ package com.resqroute.service;
 
 import com.resqroute.model.Location;
 import com.resqroute.repository.LocationRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,11 +14,15 @@ import java.util.Optional;
  * Service layer for managing depot and relief-camp locations.
  */
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class LocationService {
 
+    private static final Logger log = LoggerFactory.getLogger(LocationService.class);
+
     private final LocationRepository locationRepository;
+
+    public LocationService(LocationRepository locationRepository) {
+        this.locationRepository = locationRepository;
+    }
 
     @Transactional(readOnly = true)
     public List<Location> getAllLocations() {

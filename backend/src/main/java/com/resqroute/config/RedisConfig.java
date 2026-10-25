@@ -1,7 +1,13 @@
 package com.resqroute.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -14,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Redis cache configuration with per-cache TTL settings.
+ * Cache configuration supporting Redis when enabled, with in-memory fallback.
  *
  * <p>Cache names and their TTLs:
  * <ul>
@@ -26,8 +32,13 @@ import java.util.Map;
 @Configuration
 public class RedisConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(RedisConfig.class);
+
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+    @Primary
+    @ConditionalOnProperty(name = "spring.cache.type", havingValue = "redis")
+    public CacheManager redisCacheManager(RedisConnectionFactory connectionFactory) {
+        log.info("Initializing Redis Cache Manager with per-cache TTLs.");
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(5))
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
@@ -43,5 +54,12 @@ public class RedisConfig {
                 .cacheDefaults(defaultConfig)
                 .withInitialCacheConfigurations(cacheConfigs)
                 .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "spring.cache.type", havingValue = "simple", matchIfMissing = true)
+    public CacheManager simpleCacheManager() {
+        log.info("Initializing In-Memory Cache Manager (ConcurrentMapCacheManager).");
+        return new ConcurrentMapCacheManager("road-reports", "routes", "system-status");
     }
 }

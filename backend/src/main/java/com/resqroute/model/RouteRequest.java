@@ -2,29 +2,16 @@ package com.resqroute.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Records a dispatcher's route-planning request along with its result and approval status.
- *
- * <p>A RouteRequest captures the origin, destination, the recommended route reference,
- * and whether the dispatcher has approved it. It is persisted for audit purposes.
- *
- * <p>Approval here means the dispatcher has reviewed and accepted the suggested route
- * in the dashboard. It does NOT trigger any real-world vehicle dispatch.
  */
 @Entity
 @Table(name = "route_requests")
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class RouteRequest {
 
     @Id
@@ -41,30 +28,105 @@ public class RouteRequest {
     @NotNull
     private Location destination;
 
-    /** Serialised route summary (JSON). Full route stored in Redis. */
     @Column(columnDefinition = "TEXT")
     private String routeSummaryJson;
 
-    /** Number of alternative routes found. */
     private Integer alternativeCount;
 
-    /**
-     * Approval status.
-     * PENDING — awaiting dispatcher review.
-     * APPROVED — dispatcher has reviewed and accepted the route.
-     * REJECTED — dispatcher has rejected the suggestion.
-     */
-    @Builder.Default
     private String approvalStatus = "PENDING";
 
-    /** Dispatcher's optional notes at approval time. */
     @Column(columnDefinition = "TEXT")
     private String dispatcherNotes;
 
-    /** Timestamp when the dispatcher acted on the request. */
     private Instant reviewedAt;
 
     @CreationTimestamp
     @Column(updatable = false)
     private Instant createdAt;
+
+    public RouteRequest() {}
+
+    public RouteRequest(Long id, Location origin, Location destination, String routeSummaryJson,
+                        Integer alternativeCount, String approvalStatus, String dispatcherNotes,
+                        Instant reviewedAt, Instant createdAt) {
+        this.id = id;
+        this.origin = origin;
+        this.destination = destination;
+        this.routeSummaryJson = routeSummaryJson;
+        this.alternativeCount = alternativeCount;
+        this.approvalStatus = approvalStatus != null ? approvalStatus : "PENDING";
+        this.dispatcherNotes = dispatcherNotes;
+        this.reviewedAt = reviewedAt;
+        this.createdAt = createdAt;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private Long id;
+        private Location origin;
+        private Location destination;
+        private String routeSummaryJson;
+        private Integer alternativeCount;
+        private String approvalStatus = "PENDING";
+        private String dispatcherNotes;
+        private Instant reviewedAt;
+        private Instant createdAt;
+
+        public Builder id(Long id) { this.id = id; return this; }
+        public Builder origin(Location origin) { this.origin = origin; return this; }
+        public Builder destination(Location destination) { this.destination = destination; return this; }
+        public Builder routeSummaryJson(String routeSummaryJson) { this.routeSummaryJson = routeSummaryJson; return this; }
+        public Builder alternativeCount(Integer alternativeCount) { this.alternativeCount = alternativeCount; return this; }
+        public Builder approvalStatus(String approvalStatus) { this.approvalStatus = approvalStatus; return this; }
+        public Builder dispatcherNotes(String dispatcherNotes) { this.dispatcherNotes = dispatcherNotes; return this; }
+        public Builder reviewedAt(Instant reviewedAt) { this.reviewedAt = reviewedAt; return this; }
+        public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
+
+        public RouteRequest build() {
+            return new RouteRequest(id, origin, destination, routeSummaryJson, alternativeCount, approvalStatus, dispatcherNotes, reviewedAt, createdAt);
+        }
+    }
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public Location getOrigin() { return origin; }
+    public void setOrigin(Location origin) { this.origin = origin; }
+
+    public Location getDestination() { return destination; }
+    public void setDestination(Location destination) { this.destination = destination; }
+
+    public String getRouteSummaryJson() { return routeSummaryJson; }
+    public void setRouteSummaryJson(String routeSummaryJson) { this.routeSummaryJson = routeSummaryJson; }
+
+    public Integer getAlternativeCount() { return alternativeCount; }
+    public void setAlternativeCount(Integer alternativeCount) { this.alternativeCount = alternativeCount; }
+
+    public String getApprovalStatus() { return approvalStatus; }
+    public void setApprovalStatus(String approvalStatus) { this.approvalStatus = approvalStatus; }
+
+    public String getDispatcherNotes() { return dispatcherNotes; }
+    public void setDispatcherNotes(String dispatcherNotes) { this.dispatcherNotes = dispatcherNotes; }
+
+    public Instant getReviewedAt() { return reviewedAt; }
+    public void setReviewedAt(Instant reviewedAt) { this.reviewedAt = reviewedAt; }
+
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof RouteRequest that)) return false;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
 }

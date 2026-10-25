@@ -59,6 +59,19 @@ export default function RouteLegend() {
           </div>
         ))}
 
+        {/* Disaster Categories (Phase 2 Intelligence) */}
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--clr-text-muted)', textTransform: 'uppercase', marginTop: 4 }}>
+          Disaster Categories
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 8px', fontSize: 11 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span>🔥</span> Fire</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span>🌊</span> Flood</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span>⛰️</span> Landslide</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span>🚫</span> Blockage</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span>🏚️</span> Collapse</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span>⚠️</span> Other</div>
+        </div>
+
         {/* Hazard Zone */}
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--clr-text-muted)', textTransform: 'uppercase', marginTop: 4 }}>
           Hazard Boundaries

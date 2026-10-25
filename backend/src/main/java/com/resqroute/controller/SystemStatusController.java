@@ -1,7 +1,6 @@
 package com.resqroute.controller;
 
 import com.resqroute.service.SystemStatusService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,10 +15,13 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/status")
-@RequiredArgsConstructor
 public class SystemStatusController {
 
     private final SystemStatusService systemStatusService;
+
+    public SystemStatusController(SystemStatusService systemStatusService) {
+        this.systemStatusService = systemStatusService;
+    }
 
     /** GET /api/status — returns data mode, last refresh time and pilot district. */
     @GetMapping

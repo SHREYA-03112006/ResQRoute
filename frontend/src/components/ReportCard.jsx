@@ -1,13 +1,32 @@
 import React, { useState } from 'react';
 import StatusBadge from './StatusBadge';
 
+const CATEGORY_META = {
+  FIRE: { label: 'Fire Hazard', icon: '🔥', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' },
+  FLOOD: { label: 'Flood / Inundation', icon: '🌊', color: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.15)' },
+  LANDSLIDE: { label: 'Landslide / Rockfall', icon: '⛰️', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
+  ROAD_BLOCKAGE: { label: 'Road Blockage', icon: '🚫', color: '#e11d48', bg: 'rgba(225, 29, 72, 0.15)' },
+  BUILDING_COLLAPSE: { label: 'Building Collapse', icon: '🏚️', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)' },
+  OTHER: { label: 'Emergency Alert', icon: '⚠️', color: '#64748b', bg: 'rgba(100, 116, 139, 0.15)' },
+};
+
+const VERIFICATION_META = {
+  NEW: { label: 'NEW INCIDENT', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.15)' },
+  UPDATED: { label: 'UPDATED', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)' },
+  DUPLICATE: { label: 'DUPLICATE', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)' },
+  UNVERIFIED: { label: 'UNVERIFIED', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.15)' },
+};
+
 /**
- * ReportCard — displays a single road-condition report with:
- * - Road name and status badge
+ * ReportCard — displays a single road-condition report with Phase 2 Disaster Intelligence:
+ * - Incident Title & Disaster Category badge
+ * - Verification status (NEW, UPDATED, DUPLICATE, UNVERIFIED)
+ * - Road name, location description & coordinates/area status
  * - Match status (MATCHED, WEAK_MATCH, CONFLICT, UNMATCHED)
  * - Matched graph edge indicator
- * - Confidence score bar and breakdown
- * - Source authority badge and link
+ * - Confidence score bar and explanation
+ * - Freshness: Observed time & Retrieved time
+ * - Source authority badge and verified link
  * - Interactive dispatcher review actions
  */
 export default function ReportCard({ report, onReview }) {
@@ -33,6 +52,9 @@ export default function ReportCard({ report, onReview }) {
   };
 
   const statusCls = report.reportedStatus?.toLowerCase() || 'unknown';
+  const categoryKey = report.disasterCategory || (report.type ? report.type.replace('FLASH_', '').replace('WATERLOGGING', 'FLOOD') : 'OTHER');
+  const catMeta = CATEGORY_META[categoryKey] || CATEGORY_META.OTHER;
+  const verMeta = VERIFICATION_META[report.verificationStatus] || (report.isDemo ? VERIFICATION_META.NEW : VERIFICATION_META.NEW);
 
   const handleSaveReview = async (flagged) => {
     setSaving(true);
@@ -58,14 +80,77 @@ export default function ReportCard({ report, onReview }) {
     : report.matchStatus === 'WEAK_MATCH' ? '#f59e0b'
     : '#94a3b8';
 
+  const isLive = report.dataMode === 'LIVE';
+
   return (
     <div className={`report-card status-${statusCls} animate-in`} style={{ position: 'relative' }}>
+      {/* Category & Mode Header Banner */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              background: catMeta.bg,
+              color: catMeta.color,
+              border: `1px solid ${catMeta.color}40`,
+              borderRadius: 4,
+              padding: '2px 7px',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.4,
+              textTransform: 'uppercase',
+            }}
+          >
+            {catMeta.icon} {catMeta.label}
+          </span>
+
+          {report.verificationStatus && (
+            <span
+              style={{
+                background: verMeta.bg,
+                color: verMeta.color,
+                border: `1px solid ${verMeta.color}40`,
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: 9,
+                fontWeight: 700,
+              }}
+              title={`Verification pipeline classification: ${verMeta.label}`}
+            >
+              {verMeta.label}
+            </span>
+          )}
+        </div>
+
+        {/* Live vs Demo Badge */}
+        <span
+          style={{
+            background: isLive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+            color: isLive ? '#22c55e' : '#eab308',
+            border: `1px solid ${isLive ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            borderRadius: 4,
+            padding: '2px 6px',
+            fontSize: 9,
+            fontWeight: 800,
+            letterSpacing: 0.5,
+          }}
+          title={isLive ? 'Live TinyFish intelligence extraction' : 'Sample/Demo intelligence dataset for evaluation'}
+        >
+          {isLive ? '🟢 LIVE TINYFISH' : '🟡 DEMO / SAMPLE'}
+        </span>
+      </div>
+
+      {/* Incident Title & Road Status */}
       <div className="report-card-header">
         <div>
-          <div className="report-road-name">{report.reportedRoadName}</div>
-          {report.normalisedRoadName && report.normalisedRoadName !== report.reportedRoadName && (
-            <div style={{ fontSize: 10, color: 'var(--clr-text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-              OSM Code: {report.normalisedRoadName}
+          <div className="report-road-name" style={{ fontSize: 13, fontWeight: 700, color: 'var(--clr-text-bright)' }}>
+            {report.incidentTitle || report.reportedRoadName}
+          </div>
+          {report.reportedRoadName && report.incidentTitle && report.incidentTitle !== report.reportedRoadName && (
+            <div style={{ fontSize: 11, color: 'var(--clr-text-muted)', marginTop: 2 }}>
+              Corridor: <span style={{ color: 'var(--clr-text)' }}>{report.reportedRoadName}</span>
             </div>
           )}
         </div>
@@ -73,7 +158,9 @@ export default function ReportCard({ report, onReview }) {
       </div>
 
       {report.locationDescription && (
-        <div className="report-location">📍 {report.locationDescription}</div>
+        <div className="report-location" style={{ fontSize: 11, color: 'var(--clr-text-muted)', marginTop: 4 }}>
+          📍 {report.locationDescription}
+        </div>
       )}
 
       {/* Match & Edge Status Indicator */}
@@ -89,6 +176,7 @@ export default function ReportCard({ report, onReview }) {
             fontWeight: 700,
             letterSpacing: 0.5,
           }}
+          title={`Graph matching status: ${report.matchStatus || 'UNMATCHED'}`}
         >
           {report.matchStatus || 'UNMATCHED'}
         </span>
@@ -97,10 +185,22 @@ export default function ReportCard({ report, onReview }) {
             Edge #{report.matchedEdgeId}
           </span>
         )}
+        {report.severity && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontSize: 10,
+              fontWeight: 700,
+              color: report.severity === 'CRITICAL' ? '#ef4444' : report.severity === 'HIGH' ? '#f59e0b' : '#38bdf8',
+            }}
+          >
+            {report.severity} SEVERITY
+          </span>
+        )}
       </div>
 
-      {/* Confidence bar */}
-      <div className="confidence-bar">
+      {/* Confidence bar & explanation */}
+      <div className="confidence-bar" title={`Algorithmic confidence based on source authority, location evidence, and freshness: ${confidencePercent}%`}>
         <div className="confidence-bar-track">
           <div
             className={`confidence-bar-fill ${confidenceClass}`}
@@ -111,16 +211,16 @@ export default function ReportCard({ report, onReview }) {
       </div>
 
       <div className="report-meta">
-        {report.dataMode && (
-          <span className="report-meta-item">
-            <span>{report.dataMode === 'LIVE' ? '🟢' : '🟡'}</span>
-            <span style={{ fontWeight: 700, fontSize: '10px' }}>{report.dataMode}</span>
-          </span>
-        )}
         {report.observedAt && (
-          <span className="report-meta-item">
+          <span className="report-meta-item" title="Incident observation or alert published time">
             <span>🕐</span>
             <span>{formatTime(report.observedAt)}</span>
+          </span>
+        )}
+        {report.retrievedAt && (
+          <span className="report-meta-item" title="Pipeline retrieval & extraction timestamp">
+            <span>⚡</span>
+            <span>Sync: {formatTime(report.retrievedAt)}</span>
           </span>
         )}
         {report.sourceName && (

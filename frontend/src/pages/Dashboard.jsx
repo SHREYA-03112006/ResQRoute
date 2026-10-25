@@ -39,17 +39,18 @@ export default function Dashboard() {
   const [destination, setDestination]           = useState(null);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [activeFilter, setActiveFilter]         = useState('ALL'); // 'ALL' | 'CRITICAL' | 'BLOCKED' | 'FLOODED' | 'OPEN'
+  const [selectedCategory, setSelectedCategory] = useState('ALL'); // 'ALL' | 'FIRE' | 'FLOOD' | 'LANDSLIDE' | 'ROAD_BLOCKAGE' | 'BUILDING_COLLAPSE' | 'OTHER'
 
   // TinyFish sync status
   const [syncingTinyFish, setSyncing]           = useState(false);
   const [syncSuccessMsg, setSyncMsg]            = useState('');
 
   // ── Fetch Backend Data ─────────────────────────────────────────────────────
-  const fetchBackend = useCallback(async () => {
+  const fetchBackend = useCallback(async (cityId = selectedCityId) => {
     try {
       const [locs, reps, status] = await Promise.all([
         getLocations().catch(() => []),
-        getReports({ hoursBack: 48 }).catch(() => []),
+        getReports({ city: cityId, hoursBack: 48 }).catch(() => []),
         getSystemStatus().catch(() => null),
       ]);
       setBackendLocations(Array.isArray(locs) ? locs : []);
@@ -61,11 +62,11 @@ export default function Dashboard() {
     } finally {
       setLoadingBackend(false);
     }
-  }, []);
+  }, [selectedCityId]);
 
   useEffect(() => {
-    fetchBackend();
-  }, [fetchBackend]);
+    fetchBackend(selectedCityId);
+  }, [selectedCityId, fetchBackend]);
 
   // Reset origin/destination when city changes
   useEffect(() => {
@@ -87,8 +88,9 @@ export default function Dashboard() {
 
   const currentIncidents = useMemo(() => {
     const cityIncs = selectedCity.incidents || [];
+    // If backend returned reports for this city, use backend reports; otherwise fallback to demo incidents
     if (backendReports.length > 0) {
-      return [...cityIncs, ...backendReports];
+      return backendReports;
     }
     return cityIncs;
   }, [selectedCity, backendReports]);
@@ -106,12 +108,22 @@ export default function Dashboard() {
     return counts;
   }, []);
 
-  // Filtered incidents for the right sidebar
+  // Filtered incidents for the right sidebar (Phase 2 category + status filters)
   const filteredIncidents = useMemo(() => {
-    if (activeFilter === 'ALL') return currentIncidents;
-    if (activeFilter === 'CRITICAL') return currentIncidents.filter((i) => i.severity === 'CRITICAL');
-    return currentIncidents.filter((i) => i.reportedStatus === activeFilter);
-  }, [currentIncidents, activeFilter]);
+    let list = currentIncidents;
+    if (selectedCategory !== 'ALL') {
+      list = list.filter((i) => {
+        const cat = i.disasterCategory || (i.type ? i.type.replace('FLASH_', '').replace('WATERLOGGING', 'FLOOD') : 'OTHER');
+        return cat === selectedCategory;
+      });
+    }
+    if (activeFilter === 'CRITICAL') {
+      list = list.filter((i) => i.severity === 'CRITICAL');
+    } else if (activeFilter !== 'ALL') {
+      list = list.filter((i) => i.reportedStatus === activeFilter);
+    }
+    return list;
+  }, [currentIncidents, selectedCategory, activeFilter]);
 
   // Situation metrics for this city
   const blockedCount = currentIncidents.filter((r) => r.reportedStatus === 'BLOCKED').length;
@@ -137,13 +149,18 @@ export default function Dashboard() {
     setSyncing(true);
     setSyncMsg('');
     try {
-      const resp = await triggerTinyFishSync();
-      setSyncMsg(`✓ Ingested ${resp?.extractedCount || 0} reports from TinyFish!`);
-      await fetchBackend();
-      setTimeout(() => setSyncMsg(''), 5000);
+      const params = {
+        city: selectedCityId,
+        category: selectedCategory !== 'ALL' ? selectedCategory : undefined,
+      };
+      const resp = await triggerTinyFishSync(params);
+      const count = resp?.extractedCount ?? (Array.isArray(resp) ? resp.length : 0);
+      setSyncMsg(`✓ Ingested ${count} ${selectedCity.name} disaster reports via TinyFish!`);
+      await fetchBackend(selectedCityId);
+      setTimeout(() => setSyncMsg(''), 6000);
     } catch (err) {
       setSyncMsg('⚠ Sync failed: ' + (err.message || 'Service unavailable'));
-      setTimeout(() => setSyncMsg(''), 5000);
+      setTimeout(() => setSyncMsg(''), 6000);
     } finally {
       setSyncing(false);
     }
@@ -364,18 +381,65 @@ export default function Dashboard() {
           <div className="section-header panel-section" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <span className="section-title">📋 {selectedCity.name} Reports</span>
+                <span className="section-title">📋 {selectedCity.name} Disaster Reports</span>
                 <div style={{ fontSize: 10, color: 'var(--clr-text-muted)', marginTop: 2 }}>
-                  All items marked [DEMO] for simulation
+                  {backendReports.length > 0 ? 'Connected to live disaster intelligence backend' : 'Showing offline demo simulation data'}
                 </div>
               </div>
-              <span className="section-count">{currentIncidents.length}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  onClick={() => fetchBackend(selectedCityId)}
+                  title="Refresh reports"
+                  style={{
+                    background: 'none',
+                    border: '1px solid var(--clr-border)',
+                    borderRadius: 4,
+                    color: 'var(--clr-text-muted)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    padding: '2px 6px',
+                  }}
+                >
+                  🔄
+                </button>
+                <span className="section-count">{filteredIncidents.length}</span>
+              </div>
             </div>
 
-            {/* Severity Filter Tabs */}
+            {/* Phase 2 Disaster Category Chips */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {[
+                { id: 'ALL', label: 'All Types' },
+                { id: 'FIRE', label: '🔥 Fire' },
+                { id: 'FLOOD', label: '🌊 Flood' },
+                { id: 'LANDSLIDE', label: '⛰️ Slide' },
+                { id: 'ROAD_BLOCKAGE', label: '🚫 Block' },
+                { id: 'BUILDING_COLLAPSE', label: '🏚️ Collapse' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  style={{
+                    background: selectedCategory === cat.id ? 'rgba(59, 130, 246, 0.25)' : 'var(--clr-surface-2)',
+                    color: selectedCategory === cat.id ? '#60a5fa' : 'var(--clr-text-dim)',
+                    border: `1px solid ${selectedCategory === cat.id ? 'rgba(59, 130, 246, 0.6)' : 'var(--clr-border)'}`,
+                    borderRadius: 12,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    cursor: 'pointer',
+                    transition: 'var(--transition-fast)',
+                  }}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Severity & Condition Status Filter Tabs */}
             <div style={{ display: 'flex', gap: 4, background: 'var(--clr-surface-2)', padding: 3, borderRadius: 'var(--radius-sm)' }}>
               {[
-                { id: 'ALL', label: 'All' },
+                { id: 'ALL', label: 'All Status' },
                 { id: 'CRITICAL', label: 'Critical' },
                 { id: 'BLOCKED', label: 'Blocked' },
                 { id: 'FLOODED', label: 'Flooded' },
@@ -409,7 +473,7 @@ export default function Dashboard() {
               style={{
                 width: '100%',
                 fontSize: 11,
-                padding: '5px 8px',
+                padding: '6px 10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -422,10 +486,10 @@ export default function Dashboard() {
               {syncingTinyFish ? (
                 <>
                   <div className="loading-spinner" style={{ width: 12, height: 12 }} />
-                  Syncing Public Feeds…
+                  Syncing {selectedCity.name} Feeds via TinyFish…
                 </>
               ) : (
-                <>🎣 Sync TinyFish Public Reports</>
+                <>🎣 Sync TinyFish ({selectedCity.name})</>
               )}
             </button>
 

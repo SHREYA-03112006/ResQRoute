@@ -54,7 +54,7 @@ export default function Header({
           </>
         ) : (
           <div className="data-mode-banner data-mode-sample">
-            DEMO MODE • Phase 1
+            DEMO MODE • Phase 2 Intelligence
           </div>
         )}
       </div>

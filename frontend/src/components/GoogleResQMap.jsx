@@ -291,34 +291,47 @@ export default function GoogleResQMap({
         inc.reportedStatus === 'FLOODED' ? '#f59e0b' :
         inc.reportedStatus === 'OPEN' ? '#22c55e' : '#a855f7';
 
+      const isLive = inc.dataMode === 'LIVE';
+      const categoryKey = inc.disasterCategory || (inc.type ? inc.type.replace('FLASH_', '').replace('WATERLOGGING', 'FLOOD') : 'OTHER');
+      const timeStr = inc.observedAt || inc.timestamp ? new Date(inc.observedAt || inc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent';
+
       const content = `
         <div style="font-family:Inter,system-ui,sans-serif;padding:8px 4px;color:#0f172a;line-height:1.4;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
-            <span style="font-size:10px;font-weight:800;color:#ef4444;background:#fee2e2;padding:2px 6px;border-radius:4px;letter-spacing:0.5px;">
-              DEMO INCIDENT
+            <span style="font-size:10px;font-weight:800;color:${isLive ? '#15803d' : '#854d0e'};background:${isLive ? '#dcfce7' : '#fef9c3'};padding:2px 6px;border-radius:4px;letter-spacing:0.5px;">
+              ${isLive ? '🟢 LIVE TINYFISH' : '🟡 DEMO / SAMPLE'}
             </span>
             <span style="font-size:10px;font-weight:700;color:${statusColor};background:#f8fafc;padding:2px 6px;border-radius:4px;border:1px solid ${statusColor};">
               ${inc.reportedStatus}
             </span>
           </div>
           <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:2px;">
-            ${inc.title}
+            ${inc.incidentTitle || inc.title || inc.reportedRoadName}
           </div>
           <div style="font-size:11px;font-weight:600;color:#3b82f6;margin-bottom:6px;">
             🛣️ ${inc.reportedRoadName}
           </div>
-          <div style="font-size:11px;color:#334155;background:#f8fafc;padding:6px 8px;border-radius:6px;border-left:3px solid ${statusColor};margin-bottom:8px;">
-            ${inc.locationDescription}
-          </div>
+          ${inc.locationDescription ? `
+            <div style="font-size:11px;color:#334155;background:#f8fafc;padding:6px 8px;border-radius:6px;border-left:3px solid ${statusColor};margin-bottom:8px;">
+              ${inc.locationDescription}
+            </div>
+          ` : ''}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;color:#64748b;">
-            <div>Severity: <strong style="color:#0f172a;">${inc.severity}</strong></div>
+            <div>Severity: <strong style="color:#0f172a;">${inc.severity || 'MODERATE'}</strong></div>
             <div>Confidence: <strong style="color:#0f172a;">${Math.round((inc.confidenceScore || 0) * 100)}%</strong></div>
-            <div>Type: <strong style="color:#0f172a;">${inc.type}</strong></div>
-            <div>Time: <strong style="color:#0f172a;">${new Date(inc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+            <div>Category: <strong style="color:#0f172a;">${categoryKey}</strong></div>
+            <div>Time: <strong style="color:#0f172a;">${timeStr}</strong></div>
           </div>
-          <div style="margin-top:8px;font-size:9px;color:#94a3b8;border-top:1px dashed #cbd5e1;padding-top:4px;">
-            Simulated disaster feed • Non-verified demo marker
-          </div>
+          ${inc.verificationStatus ? `
+            <div style="margin-top:6px;font-size:10px;font-weight:700;color:#475569;">
+              Pipeline Verification: <span style="color:#0f172a;">${inc.verificationStatus}</span>
+            </div>
+          ` : ''}
+          ${inc.sourceName ? `
+            <div style="margin-top:6px;font-size:9px;color:#94a3b8;border-top:1px dashed #cbd5e1;padding-top:4px;">
+              Source: ${inc.sourceName.replace('[SAMPLE] ', '')}
+            </div>
+          ` : ''}
         </div>
       `;
       infoWindowRef.current.setContent(content);
@@ -328,21 +341,32 @@ export default function GoogleResQMap({
       }
     };
 
-    // 1. Incidents
+    // 1. Incidents (Phase 2 Disaster Intelligence)
     incidents.forEach((inc) => {
-      if (!inc.coordinates?.lat || !inc.coordinates?.lng) return;
+      const lat = inc.latitude || inc.coordinates?.lat;
+      const lng = inc.longitude || inc.coordinates?.lng;
+      if (!lat || !lng) return;
+
+      const categoryKey = inc.disasterCategory || (inc.type ? inc.type.replace('FLASH_', '').replace('WATERLOGGING', 'FLOOD') : 'OTHER');
+      const catSymbols = {
+        FIRE: '🔥',
+        FLOOD: '🌊',
+        LANDSLIDE: '⛰️',
+        ROAD_BLOCKAGE: '🚫',
+        BUILDING_COLLAPSE: '🏚️',
+        OTHER: '⚠️',
+      };
+      const symbol = catSymbols[categoryKey] || '⚠️';
 
       const isBlocked = inc.reportedStatus === 'BLOCKED';
       const isFlooded = inc.reportedStatus === 'FLOODED';
       const isOpen = inc.reportedStatus === 'OPEN';
-
       const color = isBlocked ? '#ef4444' : isFlooded ? '#f59e0b' : isOpen ? '#22c55e' : '#a855f7';
-      const symbol = isBlocked ? '✕' : isFlooded ? '~' : isOpen ? '✓' : '!';
 
       const marker = new window.google.maps.Marker({
-        position: inc.coordinates,
+        position: { lat, lng },
         map,
-        title: inc.title,
+        title: inc.incidentTitle || inc.title || inc.reportedRoadName,
         icon: {
           url: createMarkerSvgIcon(color, symbol, 30),
           scaledSize: new window.google.maps.Size(30, 38),

@@ -21,7 +21,6 @@ export default function LiveLocationControl({
 }) {
   const isRequesting = status === 'REQUESTING';
   const isDenied = status === 'DENIED';
-  const isError = status === 'ERROR';
 
   return (
     <div

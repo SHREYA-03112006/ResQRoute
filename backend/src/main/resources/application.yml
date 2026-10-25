@@ -28,7 +28,7 @@ spring:
       timeout: 2000ms
 
   cache:
-    type: redis
+    type: ${CACHE_TYPE:simple}
     redis:
       time-to-live: 300000   # 5 minutes default TTL
 

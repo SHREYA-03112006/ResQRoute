@@ -153,22 +153,36 @@ export default function FallbackResQMap({
           })}
         </LayerGroup>
 
-        {/* ── Incidents ── */}
+        {/* ── Incidents (Phase 2 Disaster Intelligence) ── */}
         <LayerGroup>
           {incidents.map((inc) => {
-            if (!inc.coordinates?.lat || !inc.coordinates?.lng) return null;
+            const lat = inc.latitude || inc.coordinates?.lat;
+            const lng = inc.longitude || inc.coordinates?.lng;
+            if (!lat || !lng) return null;
+
+            const categoryKey = inc.disasterCategory || (inc.type ? inc.type.replace('FLASH_', '').replace('WATERLOGGING', 'FLOOD') : 'OTHER');
+            const catSymbols = {
+              FIRE: '🔥',
+              FLOOD: '🌊',
+              LANDSLIDE: '⛰️',
+              ROAD_BLOCKAGE: '🚫',
+              BUILDING_COLLAPSE: '🏚️',
+              OTHER: '⚠️',
+            };
+            const symbol = catSymbols[categoryKey] || '⚠️';
+
             const isBlocked = inc.reportedStatus === 'BLOCKED';
             const isFlooded = inc.reportedStatus === 'FLOODED';
             const isOpen = inc.reportedStatus === 'OPEN';
-
             const color = isBlocked ? '#ef4444' : isFlooded ? '#f59e0b' : isOpen ? '#22c55e' : '#a855f7';
-            const symbol = isBlocked ? '✕' : isFlooded ? '~' : isOpen ? '✓' : '!';
-            const icon = makeCircleIcon(color, symbol, 26);
+            const isLive = inc.dataMode === 'LIVE';
+
+            const icon = makeCircleIcon(color, symbol, 28);
 
             return (
               <Marker
                 key={inc.id}
-                position={[inc.coordinates.lat, inc.coordinates.lng]}
+                position={[lat, lng]}
                 icon={icon}
                 eventHandlers={{
                   click: () => {
@@ -179,18 +193,38 @@ export default function FallbackResQMap({
                 <Popup>
                   <div style={{ fontSize: 12, lineHeight: 1.4 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 9, fontWeight: 800, background: '#fee2e2', color: '#ef4444', padding: '1px 5px', borderRadius: 3 }}>
-                        DEMO INCIDENT
+                      <span style={{
+                        fontSize: 9,
+                        fontWeight: 800,
+                        background: isLive ? '#dcfce7' : '#fef9c3',
+                        color: isLive ? '#15803d' : '#854d0e',
+                        padding: '1px 5px',
+                        borderRadius: 3
+                      }}>
+                        {isLive ? '🟢 LIVE TINYFISH' : '🟡 DEMO / SAMPLE'}
                       </span>
                       <strong style={{ color }}>{inc.reportedStatus}</strong>
                     </div>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginTop: 4 }}>{inc.title}</div>
-                    <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>🛣️ {inc.reportedRoadName}</div>
-                    <div style={{ fontSize: 11, marginTop: 4, color: '#334155' }}>{inc.locationDescription}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginTop: 4 }}>
+                      {inc.incidentTitle || inc.title || inc.reportedRoadName}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 2 }}>
+                      🛣️ {inc.reportedRoadName}
+                    </div>
+                    {inc.locationDescription && (
+                      <div style={{ fontSize: 11, marginTop: 4, color: '#334155' }}>
+                        {inc.locationDescription}
+                      </div>
+                    )}
                     <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Severity: <strong>{inc.severity}</strong></span>
+                      <span>Category: <strong>{categoryKey}</strong></span>
                       <span>Confidence: {Math.round((inc.confidenceScore || 0) * 100)}%</span>
                     </div>
+                    {inc.verificationStatus && (
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', marginTop: 4 }}>
+                        Status: {inc.verificationStatus}
+                      </div>
+                    )}
                   </div>
                 </Popup>
               </Marker>

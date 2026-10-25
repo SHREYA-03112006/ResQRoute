@@ -38,8 +38,13 @@ export const getReportById = (id) =>
 export const ingestReport = (rawReport) =>
   api.post('/reports/ingest', rawReport).then((r) => r.data);
 
-export const triggerTinyFishSync = (query) =>
-  api.post('/reports/tinyfish/trigger-fetch', null, { params: query ? { query } : {} }).then((r) => r.data);
+export const triggerTinyFishSync = (params) => {
+  const queryParams = typeof params === 'string' ? { query: params } : (params || {});
+  return api.post('/reports/tinyfish/trigger-fetch', null, { params: queryParams }).then((r) => r.data);
+};
+
+export const getDisasterCategories = () =>
+  api.get('/reports/categories').then((r) => r.data);
 
 export const getGraphState = () =>
   api.get('/reports/graph-state').then((r) => r.data);
